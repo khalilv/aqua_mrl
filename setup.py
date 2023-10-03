@@ -26,7 +26,8 @@ setup(
         'console_scripts': [
             'underwater_adversary_command_publisher = aqua_station_keeping.underwater_adversary_command_publisher:main',
             'aqua_pose_subscriber = aqua_station_keeping.aqua_pose_subscriber:main',
-            'downward_camera_subscriber = aqua_station_keeping.downward_camera_subscriber:main'
+            'downward_camera_subscriber = aqua_station_keeping.downward_camera_subscriber:main',
+            'imu_subscriber = aqua_station_keeping.imu_subscriber:main'
         ],
     },
 )

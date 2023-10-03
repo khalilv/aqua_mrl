@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 import numpy as np
-from ir_msgs.msg import UnderwaterAdversaryCommand
+from aqua2_interfaces.msg import UnderwaterAdversaryCommand
 
 class underwater_adversary_command_publisher(Node):
 

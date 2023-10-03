@@ -18,7 +18,7 @@ class downward_camera_subscriber(Node):
         super().__init__('downward_camera_subscriber')
         self.subscriber = self.create_subscription(
             CompressedImage, 
-            '/back_camera/image_raw/compressed', 
+            '/camera/back/image_raw/compressed', 
             self.camera_callback, 
             10)
         self.cv_bridge = cv_bridge.CvBridge()
