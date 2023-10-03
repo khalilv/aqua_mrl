@@ -1,0 +1,3 @@
+underwater_adversary_command_publisher:
+  ros__parameters:
+    current_magnitude: 5.5
