@@ -5,8 +5,8 @@ import torch.nn.functional as F
 
 from aqua_station_keeping.core.update import BasicUpdateBlock, SmallUpdateBlock
 from aqua_station_keeping.core.extractor import BasicEncoder, SmallEncoder
-from aqua_station_keeping.core.corr import CorrBlock, AlternateCorrBlock
-from aqua_station_keeping.core.utils.utils import bilinear_sampler, coords_grid, upflow8
+from aqua_station_keeping.core.corr import CorrBlock
+from aqua_station_keeping.core.utils.utils import coords_grid, upflow8
 
 try:
     autocast = torch.cuda.amp.autocast
@@ -101,10 +101,7 @@ class RAFT(nn.Module):
         
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
-        if self.args.alternate_corr:
-            corr_fn = AlternateCorrBlock(fmap1, fmap2, radius=self.args.corr_radius)
-        else:
-            corr_fn = CorrBlock(fmap1, fmap2, radius=self.args.corr_radius)
+        corr_fn = CorrBlock(fmap1, fmap2, radius=self.args.corr_radius)
 
         # run the context network
         with autocast(enabled=self.args.mixed_precision):

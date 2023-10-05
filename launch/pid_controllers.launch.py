@@ -9,8 +9,8 @@ def generate_launch_description():
 
     node=Node(
         package = 'aqua_station_keeping',
-        name = 'underwater_adversary_command_publisher',
-        executable = 'underwater_adversary_command_publisher',
+        name = 'pid_controllers',
+        executable = 'pid_controllers',
         parameters = [config], 
         output='screen',
         emulate_tty=True,

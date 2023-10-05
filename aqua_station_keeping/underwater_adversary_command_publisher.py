@@ -16,8 +16,7 @@ class underwater_adversary_command_publisher(Node):
         self.timer = self.create_timer(timer_period, self.publish_command)
         self.cmd = UnderwaterAdversaryCommand()
         self.current_magnitude = self.get_parameter('current_magnitude').get_parameter_value().double_value
-        print(self.current_magnitude)
-
+        print('Initialized: underwater adversary')
 
     def publish_command(self):
         x = np.random.uniform(low=-1.0, high=1.0)

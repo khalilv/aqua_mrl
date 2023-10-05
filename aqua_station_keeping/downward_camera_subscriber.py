@@ -5,7 +5,6 @@ import cv_bridge
 import time
 import torch
 from aqua_station_keeping.core.raft import RAFT
-from aqua_station_keeping.core.utils import flow_viz
 from aqua_station_keeping.core.utils.utils import InputPadder
 from sensor_msgs.msg import CompressedImage
 from rclpy.node import Node
@@ -63,7 +62,7 @@ class downward_camera_subscriber(Node):
         with torch.no_grad():
             padder = InputPadder(current_img.shape)
             img1, img2 = padder.pad(current_img, last_img)
-            flow_low,flow_up = self.model(img1, img2, iters=20, test_mode=True)
+            _,flow_up = self.model(img1, img2, iters=8, test_mode=True)
             flow = flow_up[0].permute(1,2,0).cpu().numpy()
             avg_flo = np.zeros((self.yseg,self.xseg,2))
             for y in range(self.yseg):
