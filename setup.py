@@ -26,7 +26,10 @@ setup(
         'console_scripts': [
             'underwater_adversary_command_publisher = aqua_station_keeping.underwater_adversary_command_publisher:main',
             'downward_camera_subscriber = aqua_station_keeping.downward_camera_subscriber:main',
-            'pid_controllers = aqua_station_keeping.pid_controllers:main'
+            'pid_controllers = aqua_station_keeping.pid_controllers:main',
+            'manual_controller = aqua_station_keeping.manual_controller:main',
+            'yolo_detector = aqua_station_keeping.yolo_detector:main'
+
         ],
     },
 )

@@ -12,7 +12,7 @@ class underwater_adversary_command_publisher(Node):
                                     ('current_magnitude', 0.0)
                                 ])
         self.publisher = self.create_publisher(UnderwaterAdversaryCommand, 'simulator/adversary_command', 10)
-        timer_period = 5  # seconds
+        timer_period = 20  # seconds
         self.timer = self.create_timer(timer_period, self.publish_command)
         self.cmd = UnderwaterAdversaryCommand()
         self.current_magnitude = self.get_parameter('current_magnitude').get_parameter_value().double_value

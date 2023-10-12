@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from aqua_station_keeping.core.update import BasicUpdateBlock, SmallUpdateBlock
-from aqua_station_keeping.core.extractor import BasicEncoder, SmallEncoder
-from aqua_station_keeping.core.corr import CorrBlock
-from aqua_station_keeping.core.utils.utils import coords_grid, upflow8
+from aqua_station_keeping.RAFT.update import BasicUpdateBlock, SmallUpdateBlock
+from aqua_station_keeping.RAFT.extractor import BasicEncoder, SmallEncoder
+from aqua_station_keeping.RAFT.corr import CorrBlock
+from aqua_station_keeping.RAFT.utils.utils import coords_grid, upflow8
 
 try:
     autocast = torch.cuda.amp.autocast
