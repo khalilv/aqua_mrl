@@ -7,6 +7,7 @@ class AnglePID:
         self.target = self.convert_to_0_360(target)
         self.command_range = command_range
         self.last_error = None
+        self.last_time = None
         self.Kp = gains[0]
         self.Ki = gains[1]
         self.Kd = gains[2]
@@ -27,17 +28,19 @@ class AnglePID:
         #normalize error to [-1,1]
         error = error / 180
 
-        self.accumulator += error
-
-        #pi-control
-        command = (self.Kp * error) + (self.Ki * self.accumulator)
+        #p-control
+        command = (self.Kp * error)
         
-        #add d-control
+        current_time = time.time()
+        #add d-control and i-control
         if self.last_error is not None:
-            error_dt = (error - self.last_error)
-            command = command + (self.Kd * error_dt)
+            dt = current_time - self.last_time
+            error_dt = (error - self.last_error)/dt
+            self.accumulator += error * dt
+            command = command + (self.Ki * self.accumulator) + (self.Kd * error_dt) 
 
         self.last_error = error
+        self.last_time = current_time
         
         #clip command to min/max values
         return np.clip(command, self.command_range[0], self.command_range[1])
