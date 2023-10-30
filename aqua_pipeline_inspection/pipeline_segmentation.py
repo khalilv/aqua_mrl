@@ -30,7 +30,7 @@ class pipeline_segmentation(Node):
             ToTensorV2()
         ])
         checkpoint = torch.load(
-            '/usr/local/data/kvirji/pipeline_inspection/models/deeplabv3/best.pt', map_location=self.device)
+            'src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3/best.pt', map_location=self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.model.eval()
         cv2.namedWindow("Pipeline", cv2.WINDOW_AUTOSIZE)
