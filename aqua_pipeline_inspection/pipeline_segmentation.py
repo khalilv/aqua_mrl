@@ -6,9 +6,7 @@ from rclpy.node import Node
 import numpy as np
 from torchvision import models
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
-import torch
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
+from aqua_pipeline_inspection.DeepLabv3.deeplabv3 import DeepLabv3
 import time
 
 class pipeline_segmentation(Node):
@@ -21,18 +19,7 @@ class pipeline_segmentation(Node):
             self.camera_callback,
             10)
         self.cv_bridge = cv_bridge.CvBridge()
-        self.device = torch.device(
-            "cuda:0" if torch.cuda.is_available() else "cpu")
-        self.model = self.load_model(2)
-        self.model.to(self.device)
-        self.transforms = A.Compose([
-            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ToTensorV2()
-        ])
-        checkpoint = torch.load(
-            'src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3/best.pt', map_location=self.device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.model.eval()
+        self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3/best.pt')
         cv2.namedWindow("Pipeline", cv2.WINDOW_AUTOSIZE)
         print('Initialized: pipeline_segmentation')
 
@@ -40,18 +27,15 @@ class pipeline_segmentation(Node):
         t0 = time.time()
         img = np.fromstring(msg.data.tobytes(), np.uint8)
         img = cv2.imdecode(img, cv2.IMREAD_COLOR)
-        transformed_img = self.transforms(image=img)
-        transformed_img = transformed_img['image'].to(self.device)
-        transformed_img = torch.unsqueeze(transformed_img, 0)
-        outputs = self.model(transformed_img)[
-            'out'].squeeze()  # run model on inputs        
-        pred = np.stack((torch.argmax(outputs, dim=0).detach(
-        ).cpu().numpy() * 255,)*3, axis=-1).astype(np.uint8)
+        pred = self.model.segment(img)
+        t1 = time.time()
+        print('Processing time: ', (t1 - t0))
+
+        #display mask and original image
+        pred = np.stack((pred * 255,)*3, axis=-1).astype(np.uint8)
         concat = np.concatenate((pred, img), axis=1)
         cv2.imshow('Pipeline', concat)
         cv2.waitKey(1)
-        t1 = time.time()
-        print('Total processing time: ', (t1 - t0))
         return
 
     def load_model(self, n_classes):

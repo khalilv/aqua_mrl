@@ -12,6 +12,7 @@ import numpy as np
 from ignite.metrics import Precision, Recall, Loss, Accuracy
 from tqdm import tqdm
 import os
+import argparse
 
 # data transformations
 data_transforms = {
@@ -43,23 +44,23 @@ def update_metrics(metrics, outputs, labels):
 
 
 def load_model(n_classes):
-    model = models.segmentation.deeplabv3_resnet101(
+    model = models.segmentation.deeplabv3_mobilenet_v3_large(
         pretrained=True, progress=True)
     # freeze weights
     for param in model.parameters():
         param.requires_grad = False
     # replace classifier
-    model.classifier = DeepLabHead(2048, num_classes=n_classes)
+    model.classifier = DeepLabHead(960, num_classes=n_classes)
     return model
 
 
 def train(args=None):
-    root = '/usr/local/data/kvirji/pipeline_inspection/simulation_dataset/'
-    model_save_path = '/usr/local/data/kvirji/pipeline_inspection/models/deeplabv3/'
-    batch_size = 32
-    analyze = False
+    root = args.dataset_root
+    model_save_path = args.save_path
+    batch_size = args.batch_size
+    analyze = args.analyze
+    epochs = args.epochs
     metrics = []
-    epochs = 10
     best_f1 = -1
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = load_model(2)
@@ -179,5 +180,17 @@ def train(args=None):
                 }, os.path.join(model_save_path, 'best.pt'))
                 best_f1 = valid_f1
 
-
-train()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset_root', default='simulation_dataset/', type=str,
+                        help='path to dataset root')
+    parser.add_argument('--save_path', default='models/', type=str,
+                        help='path to save the model')
+    parser.add_argument('--batch_size', default=32, type=int,
+                        help='batch size to use during training')
+    parser.add_argument('--epochs', default=50, type=int,
+                        help='number of epochs to train for')
+    parser.add_argument('--analyze', default=False, type=bool,
+                        help='analyze images from batch')
+    args = parser.parse_args()
+    train(args)

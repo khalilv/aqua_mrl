@@ -7,7 +7,6 @@ import os
 from pynput import keyboard
 import numpy as np 
 import cv2 
-import torch 
 
 class manual_controller(Node):
     def __init__(self):
@@ -54,10 +53,8 @@ class manual_controller(Node):
                 self.recieved_command = True
             elif key.char == 'k':
                 self.command.speed = np.clip(self.command.speed - 0.25, 0.25, 1.0)
-                self.recieved_command = True
             elif key.char == 'l':
                 self.command.speed = np.clip(self.command.speed + 0.25, 0.25, 1.0)
-                self.recieved_command = True
         except AttributeError:
             if key == keyboard.Key.up: # heave up
                 self.command.heave = 0.25

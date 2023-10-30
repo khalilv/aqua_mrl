@@ -1,18 +1,18 @@
 import torch
 from torchvision import models
-from torch.utils.data.sampler import RandomSampler, SequentialSampler
+from torch.utils.data.sampler import SequentialSampler
 from torch.utils.data import DataLoader
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from torchinfo import summary
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from datasets import PipelineDataset
-from torch import nn, optim
 import numpy as np
-from ignite.metrics import Precision, Recall, Loss, Accuracy
+from ignite.metrics import Precision, Recall, Accuracy
 from tqdm import tqdm
 from time import time, sleep
 import cv2
+import argparse
 
 # data transformations
 data_transforms = {
@@ -36,20 +36,20 @@ def update_metrics(metrics, outputs, labels):
 
 
 def load_model(n_classes):
-    model = models.segmentation.deeplabv3_resnet101(
+    model = models.segmentation.deeplabv3_mobilenet_v3_large(
         pretrained=True, progress=True)
     # freeze weights
     for param in model.parameters():
         param.requires_grad = False
     # replace classifier
-    model.classifier = DeepLabHead(2048, num_classes=n_classes)
+    model.classifier = DeepLabHead(960, num_classes=n_classes)
     return model
 
 
 def eval(args=None):
-    root = '/usr/local/data/kvirji/pipeline_inspection/simulation_dataset/'
-    checkpoint_path = '/usr/local/data/kvirji/pipeline_inspection/models/deeplabv3/best.pt'
-    batch_size = 1
+    root = args.dataset_root
+    checkpoint_path = args.checkpoint_path
+    batch_size = args.batch_size
     average_fps = 0
     n = 0
     metrics = []
@@ -61,11 +61,11 @@ def eval(args=None):
     summary(model)
 
     dataset = PipelineDataset(root=root,
-                                   split='test', transforms=data_transforms['test'])
+                              split='test', transforms=data_transforms['test'])
     sampler = SequentialSampler(dataset)
     loader = DataLoader(
         dataset, sampler=sampler, batch_size=batch_size)
-    
+
     # define metrics
     p = Precision(average=False, device=device)
     r = Recall(average=False, device=device)
@@ -93,14 +93,17 @@ def eval(args=None):
                 average_fps = average_fps + ((1/n) * ((t1 - t0) - average_fps))
             n += 1
 
-            #display outputs
-            for ind,out in enumerate(outputs):
-                im = np.stack((torch.argmax(out, dim=0).detach().cpu().numpy() * 255,)*3, axis=-1).astype(np.uint8)
-                mask = np.stack((masks[ind].detach().cpu().numpy() * 255,)*3, axis=-1).astype(np.uint8)
-                concat = np.concatenate((im,mask), axis=1)
-                cv2.imshow('Out', concat)
-                cv2.waitKey(250)
-                sleep(0.5)
+            # # display outputs
+            # for ind, out in enumerate(outputs):
+            #     im = np.stack((torch.argmax(out, dim=0).detach(
+            #     ).cpu().numpy() * 255,)*3, axis=-1).astype(np.uint8)
+            #     mask = np.stack(
+            #         (masks[ind].detach().cpu().numpy() * 255,)*3, axis=-1).astype(np.uint8)
+            #     concat = np.concatenate((im, mask), axis=1)
+            #     cv2.imshow('Out', concat)
+            #     cv2.waitKey(250)
+            #     sleep(0.5)
+
             # update metrics
             update_metrics(metrics, outputs, masks)
 
@@ -110,5 +113,14 @@ def eval(args=None):
         print("Test Stats: F1: {:.4f}, Accuracy: {:.4f} FPS per batch: {:.4f}".format(
             test_f1, test_accuracy, average_fps))
 
-eval()
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset_root', default='simulation_dataset/', type=str,
+                        help='path to dataset root')
+    parser.add_argument('--checkpoint_path', required=True, type=str,
+                        help='trained model to load')
+    parser.add_argument('--batch_size', default=32, type=int,
+                        help='batch size to use during testing')
+    args = parser.parse_args()
+    eval(args)

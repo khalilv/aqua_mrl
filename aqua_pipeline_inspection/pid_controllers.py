@@ -2,7 +2,6 @@ import rclpy
 from rclpy.node import Node
 from aqua_pipeline_inspection.control.PID import AnglePID
 from aqua2_interfaces.msg import AquaPose, Command
-from time import time 
 
 class pid_controllers(Node):
     def __init__(self):
