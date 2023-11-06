@@ -55,7 +55,7 @@ class AnglePID:
 
 class PID:
     def __init__(self, target = 0.0, command_range = [-1.0,1.0],
-                gains = [0.0,0.0,0.0], reverse = False):
+                gains = [0.0,0.0,0.0], reverse = False, normalization_factor = 1):
         self.target = target
         self.command_range = command_range
         self.Kp = gains[0]
@@ -65,6 +65,7 @@ class PID:
         self.last_time = None
         self.accumulator = 0.0
         self.reverse = reverse
+        self.n_factor = normalization_factor
         
 
     def control(self, measurement):
@@ -75,7 +76,7 @@ class PID:
             error = error * -1
         
         #normalize error to [-1,1]
-        error = error / 200
+        error = error / self.n_factor
 
         #p-control
         command = (self.Kp * error)

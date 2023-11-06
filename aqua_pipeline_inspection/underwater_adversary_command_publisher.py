@@ -19,8 +19,8 @@ class underwater_adversary_command_publisher(Node):
         print('Initialized: underwater adversary')
 
     def publish_command(self):
-        x = 1.0
-        z = 0.0
+        x = 0.0
+        z = np.random.uniform(-1.0,1.0)
         
         #scale up vector to current magnitude
         n = np.sqrt(np.square(x) + np.square(z))

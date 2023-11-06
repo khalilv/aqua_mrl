@@ -8,9 +8,10 @@ from torchvision import models
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from aqua_pipeline_inspection.DeepLabv3.deeplabv3 import DeepLabv3
 import time
-from std_msgs.msg import UInt8MultiArray
+from std_msgs.msg import Float32
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
+
 
 class pipeline_segmentation(Node):
 
@@ -21,42 +22,68 @@ class pipeline_segmentation(Node):
             '/camera/back/image_raw/compressed',
             self.camera_callback,
             10)
-        self.mask_publisher = self.create_publisher(UInt8MultiArray, '/segmentation/mask', 10)
-        self.mask = UInt8MultiArray()
+        self.command_publisher = self.create_publisher(Float32, '/pipeline/error', 10)
+        self.command = Float32()
         self.cv_bridge = cv_bridge.CvBridge()
         self.img_size = (300,400)
         self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3/best.pt')
-        self.missed = 0
         self.current_error = 0
+
+        #init kalman filter for tracking
         self.kalman = KalmanFilter(dim_x=2, dim_z=1)
-        self.kalman.x = np.zeros(2)
-        self.kalman.F = np.array([[1.,1.],[0.,1.]])
-        self.kalman.H = np.array([[1.,0.]])
-        self.kalman.P *= 1000.
-        self.kalman.R = 30
-        self.kalman.Q = Q_discrete_white_noise(dim=2, dt=0.1, var=0.13)
+        self.kalman.x = np.zeros(2) #position and velocity. init both to 0
+        self.kalman.F = np.array([[1.,1.],[0.,1.]]) #state transition matrix
+        self.kalman.H = np.array([[1.,0.]]) #measurement function. only measure position
+        self.kalman.P *= np.array([[100.,0.],[0., 1000.]]) #covariance matrix give high uncertainty to unobservable initial velocities
+        self.kalman.R = 20 #measurement noise in px
+        self.kalman.Q = Q_discrete_white_noise(dim=2, dt=0.02, var=0.13)
+        
         cv2.namedWindow("Pipeline Detection", cv2.WINDOW_AUTOSIZE)
         print('Initialized: pipeline_segmentation')
 
     def camera_callback(self, msg):
         t0 = time.time()
+
         img = np.fromstring(msg.data.tobytes(), np.uint8)
         img = cv2.imdecode(img, cv2.IMREAD_COLOR)
+
+        #segment image
         pred = self.model.segment(img)
         pred = pred.astype(np.uint8) * 255
-        r,theta = self.ransac(pred, tau = 30, iters = 20)
+        
+        #ransac on mask
+        try:
+            r,theta = self.ransac(pred, tau = 30, iters = 20)
+        except AssertionError:
+            print('No pipeline detected')
+            self.command.data = float(self.img_size[0] + self.img_size[1] + 1) #send stop command as w + h + 1 
+            self.command_publisher.publish(self.command)
+            return
+
+        #calculate error
         errors = self.line_to_error(r, theta)
+
+        #kalman filter predict
         self.kalman.predict()
+
+        #kalman filter update with measurement 
         if np.abs((errors[0] - self.current_error)) < np.abs((errors[1] - self.current_error)):
             self.kalman.update(errors[0])
         else:
             self.kalman.update(errors[1])
+
+        #publish error/command
         self.current_error = self.kalman.x[0] 
-        waypoint = self.error_to_boundary_point(self.current_error)
+        self.command.data = self.current_error
+        self.command_publisher.publish(self.command)
+
+        #display waypoint
+        waypoint = self.error_to_boundary_point(self.current_error)       
         cv2.circle(pred, (waypoint[0], waypoint[1]), 5, 0, 2)
         cv2.imshow('Pipeline Detection', pred)
-        cv2.imwrite('pipe.png', pred)
+        # cv2.imwrite('pipe.png', pred)
         cv2.waitKey(1)
+        
         t1 = time.time()
         print('Processing time: ', (t1 - t0))
         return
@@ -101,42 +128,46 @@ class pipeline_segmentation(Node):
 
         return errors
     
-    def error_to_boundary_point(self, command):
+    def error_to_boundary_point(self, error):
         w = self.img_size[1]
         h = self.img_size[0]
-        if command > -w/2 and command < w/2: #top
-            return [int(command + w/2),0]
-        elif command > w/2 and command < w/2 + h: #right
-            return [w, int(command - w/2)]
-        elif command < -w/2 and command > -w/2 - h: #left
-            return [0, int(-command - w/2)]
-        elif command > 0: #bottom
-            return [int(h + w/2 + w - command), h]
+        if error > -w/2 and error < w/2: #top
+            return [int(error + w/2),0]
+        elif error > w/2 and error < w/2 + h: #right
+            return [w, int(error - w/2)]
+        elif error < -w/2 and error > -w/2 - h: #left
+            return [0, int(-error - w/2)]
+        elif error > 0: #bottom
+            return [int(h + w/2 + w - error), h]
         else:
-            return [int(-w/2 - h - command), h]
+            return [int(-w/2 - h - error), h]
         
     def ransac(self, mask, tau, iters):
         argmask = np.argwhere(mask)
+        assert len(argmask) > 2 # not enough points to fit a line
         max_vote = 0
-        r_max = None
-        theta_max = None
+        rho = None
+        theta = None
         for _ in range(iters):
-            votes = 0
             point_indicies = np.random.choice(len(argmask), 2, False)
             p1 = argmask[point_indicies[0]]
             p2 = argmask[point_indicies[1]]
-            if p2[0] == p1[0]:
-                theta = np.pi/2
-            else:
-                theta = np.arctan((p1[1]-p2[1])/(p2[0]-p1[0]))
-            r = p1[1]*np.cos(theta) + p1[0]*np.sin(theta)
-            dist_to_line = np.abs(argmask[:,1]*np.cos(theta) + argmask[:,0]*np.sin(theta) - r)
-            votes = (dist_to_line < tau).sum()
-            if votes > max_vote:
-                max_vote = votes
-                r_max = r
-                theta_max = theta
-        return r_max, theta_max
+            t = np.arctan2((p1[1]-p2[1]), (p2[0]-p1[0]))
+            r = p1[1]*np.cos(t) + p1[0]*np.sin(t)
+            dist_to_line = np.abs(argmask[:,1]*np.cos(t) + argmask[:,0]*np.sin(t) - r)
+            len_cset = (dist_to_line < tau).sum()
+            if len_cset > max_vote and len_cset > self.min_cset():
+                max_vote = len_cset
+                rho, theta = r , t
+        assert rho is not None
+        assert theta is not None
+        return rho, theta
+    
+    #minimum size for consensus set 
+    def min_cset(self):
+        w = self.img_size[1]
+        h = self.img_size[0]
+        return (0.4*w)*(0.4*h)/2
 
 def main(args=None):
     rclpy.init(args=args)
