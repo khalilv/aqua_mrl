@@ -50,7 +50,7 @@ class pipeline_segmentation(Node):
         #segment image
         pred = self.model.segment(img)
         pred = pred.astype(np.uint8) * 255
-        
+
         #ransac on mask
         try:
             r,theta = self.ransac(pred, tau = 30, iters = 20)
@@ -81,7 +81,7 @@ class pipeline_segmentation(Node):
         waypoint = self.error_to_boundary_point(self.current_error)       
         cv2.circle(pred, (waypoint[0], waypoint[1]), 5, 0, 2)
         cv2.imshow('Pipeline Detection', pred)
-        # cv2.imwrite('pipe.png', pred)
+        # cv2.imwrite('waypoint.png', pred)
         cv2.waitKey(1)
         
         t1 = time.time()
@@ -167,7 +167,8 @@ class pipeline_segmentation(Node):
     def min_cset(self):
         w = self.img_size[1]
         h = self.img_size[0]
-        return (0.4*w)*(0.4*h)/2
+        # return (0.4*w)*(0.4*h)/2
+        return 0
 
 def main(args=None):
     rclpy.init(args=args)

@@ -3,6 +3,8 @@ from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
 from aqua_pipeline_inspection.control.PID import AnglePID, PID
 from std_msgs.msg import Float32
+import numpy as np 
+import os
 
 class pid_pipeline_inspection(Node):
     def __init__(self):
@@ -25,11 +27,20 @@ class pid_pipeline_inspection(Node):
         self.command.pitch = 0.0
         self.command.yaw = 0.0
         self.img_size = (300, 400)
-        print('Initialized: pid pipeline inspection ')
+        self.record_trajectory = True
+        self.trajectory = []
+        self.finish_line = 25 + 47.14558 #25 + offset
+        self.save_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/'
+        self.num_trajectories = len(os.listdir(self.save_path))
+        print('Initialized: pid pipeline inspection')
   
     def imu_callback(self, imu):
         self.measured_roll_angle = self.calculate_roll(imu)
         self.measured_pitch_angle = self.calculate_pitch(imu)
+        if imu.x > self.finish_line:
+            self.finish(True)
+        else:
+            self.trajectory.append([imu.x, imu.y, imu.z])
         return
 
     def calculate_roll(self, imu):
@@ -41,10 +52,7 @@ class pid_pipeline_inspection(Node):
     def pipeline_error_callback(self, error):
         if error.data >= self.img_size[0] + self.img_size[1] + 1: #stop command = w + h + 1
             print('Recieved stop command')
-            self.command.speed = 0.0 
-            self.command.roll = 0.0
-            self.command.pitch = 0.0
-            self.command.yaw = 0.0
+            self.finish(False)
         else:
             self.command.speed = 0.25 #fixed speed
             self.command.yaw = self.yaw_pid.control(error.data)
@@ -52,8 +60,19 @@ class pid_pipeline_inspection(Node):
             self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
         
         self.command_publisher.publish(self.command)
-        print(self.command)
+        return 
+    
+    def finish(self, complete):
+        if complete:
+            print('Goal reached')
+        else:
+            print('Goal not reached')
 
+        if self.record_trajectory:
+            print('Saving trajectory')
+            with open(self.save_path + 'pid_trajectory_with_current_{}.npy'.format(str(self.num_trajectories)), 'wb') as f:
+                np.save(f, np.array(self.trajectory))
+        rclpy.shutdown()
 
 def main(args=None):
     rclpy.init(args=args)
