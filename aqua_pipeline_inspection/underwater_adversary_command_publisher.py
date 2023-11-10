@@ -19,14 +19,15 @@ class underwater_adversary_command_publisher(Node):
         print('Initialized: underwater adversary')
 
     def publish_command(self):
-        x = 0.0
+        x = np.random.uniform(-1.0,1.0)
         z = np.random.uniform(-1.0,1.0)
+        y = np.random.uniform(-1.0,1.0)
         
         #scale up vector to current magnitude
-        n = np.sqrt(np.square(x) + np.square(z))
+        n = np.sqrt(np.square(x) + np.square(z) + np.square(y))
         self.cmd.current_x = (self.current_magnitude/n) * x
         self.cmd.current_z = (self.current_magnitude/n) * z
-        self.cmd.current_y = 0.0
+        self.cmd.current_y = (self.current_magnitude/n) * y
         
         self.publisher.publish(self.cmd)
         self.get_logger().info('Publishing adversary command')

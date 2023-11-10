@@ -21,8 +21,9 @@ class pid_pipeline_inspection(Node):
         self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_sensor_callback, 10)
         
         #initialize pid controllers
+        self.target_depth = 11.0
         self.roll_pid = AnglePID(target = 0.0, gains = [2.75, 0.0, 3.75], reverse=True)
-        self.pitch_pid = PID(target = 11.0, gains = [0.01, 0.0, 0.25], command_range=[-0.02,0.02], normalization_factor=5)
+        self.pitch_pid = PID(target = self.target_depth, gains = [0.01, 0.0, 0.25], command_range=[-0.02,0.02], normalization_factor=5)
         self.yaw_pid = PID(target = 0.0, gains = [0.6, 0.0, 1.1], reverse=True, normalization_factor=700)
         self.measured_roll_angle = 0.0
         self.measured_depth = 0.0
@@ -50,7 +51,10 @@ class pid_pipeline_inspection(Node):
         with open(self.target_trajectory, 'rb') as f:
             self.pipeline_x = np.load(f) + self.offset_x
             self.pipeline_z = np.load(f) + self.offset_z
-        self.max_error_to_target = 3.0 #if < z distance to pipeline then halt
+        
+        #define max errors to target trajectory
+        self.max_z_error_to_target = 3.0 #if z distance to pipeline > max => halt
+        self.max_y_error_to_target = 3.0 #if y distance to pipeline > max => halt
 
         #end of pipe
         self.finish_line_x = 25 + self.offset_x #25 + offset
@@ -61,8 +65,8 @@ class pid_pipeline_inspection(Node):
         self.measured_roll_angle = self.calculate_roll(imu)
         if imu.x > self.finish_line_x:
             self.finish(True)
-        elif np.abs(imu.z - self.get_target_z(imu.x)) > self.max_error_to_target:
-            print('Drifted far from target trajectory')
+        elif np.abs(imu.z - self.get_target_z(imu.x)) > self.max_z_error_to_target:
+            print('Drifted far from target trajectory in z direction')
             self.finish(False)
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
@@ -70,6 +74,9 @@ class pid_pipeline_inspection(Node):
     
     def depth_sensor_callback(self, depth):
         self.measured_depth = depth.data
+        if np.abs(self.measured_depth - self.target_depth) > self.max_y_error_to_target:
+            print('Drifted far from target trajectory in y direction')
+            self.finish(False)
         return
 
     def calculate_roll(self, imu):
@@ -87,7 +94,7 @@ class pid_pipeline_inspection(Node):
     
     def pipeline_error_callback(self, error):
         if error.data >= self.img_size[0] + self.img_size[1] + 1: #stop command = w + h + 1
-            print('Recieved stop command')
+            print('Recieved stop command from vision module')
             self.finish(False)
         else:
             self.command.speed = 0.25 #fixed speed
