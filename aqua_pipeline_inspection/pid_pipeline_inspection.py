@@ -22,7 +22,7 @@ class pid_pipeline_inspection(Node):
         
         #initialize pid controllers
         self.target_depth = 11.0
-        self.roll_pid = AnglePID(target = 0.0, gains = [2.75, 0.0, 3.75], reverse=True)
+        self.roll_pid = AnglePID(target = 0.0, gains = [0.1, 0.0, 2.75], reverse=True)
         self.pitch_pid = PID(target = self.target_depth, gains = [0.01, 0.0, 0.25], command_range=[-0.02,0.02], normalization_factor=5)
         self.yaw_pid = PID(target = 0.0, gains = [0.6, 0.0, 1.1], reverse=True, normalization_factor=700)
         self.measured_roll_angle = 0.0
