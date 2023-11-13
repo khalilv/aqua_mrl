@@ -1,10 +1,12 @@
 import rclpy
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
+from ir_aquasim_interfaces.srv import EmptyWorkaround
 from aqua_pipeline_inspection.control.PID import AnglePID, PID
 from std_msgs.msg import Float32
 import numpy as np 
 import os
+from time import sleep
 
 class pid_pipeline_inspection(Node):
     def __init__(self):
@@ -18,15 +20,17 @@ class pid_pipeline_inspection(Node):
             '/pipeline/error', 
             self.pipeline_error_callback, 
             10)
-        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_sensor_callback, 10)
-        
+        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, 10)
+
         #initialize pid controllers
-        self.target_depth = 11.0
-        self.roll_pid = AnglePID(target = 0.0, gains = [0.1, 0.0, 2.75], reverse=True)
-        self.pitch_pid = PID(target = self.target_depth, gains = [0.01, 0.0, 0.25], command_range=[-0.02,0.02], normalization_factor=5)
+        self.target_depth = 10.0
+        self.roll_pid = AnglePID(target = 0.0, gains = [2.75, 0.0, 3.75], reverse=True)
+        self.pitch_pid = AnglePID(target = 0.0, gains = [0.5181, 0.0, 0.9])
+        self.heave_pid = PID(target= self.target_depth, gains=[0.1, 0.0, 0.2], reverse=True)
         self.yaw_pid = PID(target = 0.0, gains = [0.6, 0.0, 1.1], reverse=True, normalization_factor=700)
         self.measured_roll_angle = 0.0
-        self.measured_depth = 0.0
+        self.measured_pitch_angle = 0.0
+        self.measured_depth = self.target_depth #to avoid any sporadic behaviour at the start
         
         #initialize command
         self.command = Command()
@@ -54,15 +58,19 @@ class pid_pipeline_inspection(Node):
         
         #define max errors to target trajectory
         self.max_z_error_to_target = 3.0 #if z distance to pipeline > max => halt
-        self.max_y_error_to_target = 3.0 #if y distance to pipeline > max => halt
+        self.max_y_error_to_target = 5.0 #if y distance to pipeline > max => halt
 
         #end of pipe
         self.finish_line_x = 25 + self.offset_x #25 + offset
 
+        #reset command
+        self.reset_client = self.create_client(EmptyWorkaround, '/simulator/reset_robot')
+        self.reset_req = EmptyWorkaround.Request()
         print('Initialized: pid pipeline inspection')
   
     def imu_callback(self, imu):
         self.measured_roll_angle = self.calculate_roll(imu)
+        self.measured_pitch_angle = self.calculate_pitch(imu)
         if imu.x > self.finish_line_x:
             self.finish(True)
         elif np.abs(imu.z - self.get_target_z(imu.x)) > self.max_z_error_to_target:
@@ -72,7 +80,7 @@ class pid_pipeline_inspection(Node):
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
     
-    def depth_sensor_callback(self, depth):
+    def depth_callback(self, depth):
         self.measured_depth = depth.data
         if np.abs(self.measured_depth - self.target_depth) > self.max_y_error_to_target:
             print('Drifted far from target trajectory in y direction')
@@ -81,6 +89,9 @@ class pid_pipeline_inspection(Node):
 
     def calculate_roll(self, imu):
         return imu.roll
+    
+    def calculate_pitch(self, imu):
+        return imu.pitch
     
     def get_target_z(self, x):
         ind = np.argwhere(self.pipeline_x >= x)[0][0]
@@ -100,8 +111,8 @@ class pid_pipeline_inspection(Node):
             self.command.speed = 0.25 #fixed speed
             self.command.yaw = self.yaw_pid.control(error.data)
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-            self.command.pitch = self.pitch_pid.control(self.measured_depth)
-        
+            self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
+            self.command.heave = self.heave_pid.control(self.measured_depth)
         self.command_publisher.publish(self.command)
         return 
     
@@ -115,8 +126,27 @@ class pid_pipeline_inspection(Node):
             print('Saving trajectory')
             with open(self.save_path + 'pid_trajectory_with_current_{}.npy'.format(str(self.num_trajectories)), 'wb') as f:
                 np.save(f, np.array(self.trajectory))
-        rclpy.shutdown()
+            self.num_trajectories += 1
+        
+        self.reset()
+        return
+    
+    def reset(self):
+        print('Resetting simulation')
 
+        self.reset_client.call_async(self.reset_req)
+        
+        #reset errors
+        self.measured_roll_angle = 0.0
+        self.measured_pitch_angle = 0.0
+        self.measured_depth = self.target_depth
+
+        #reset trajectory
+        self.trajectory = []
+
+        sleep(0.5)
+        return
+    
 def main(args=None):
     rclpy.init(args=args)
 

@@ -1,13 +1,16 @@
 underwater_adversary_command_publisher:
   ros__parameters:
-    current_magnitude: 0.25
+    current_magnitude: 0.5
 pid_controllers:
   ros__parameters:
-    pitch_gains: [0.01, 0.0, 0.25] #P,I,D
-    depth_target: 12.0
-    roll_gains: [0.25, 0.0, 2.75] #P,I,D
-    roll_target: -80.0
+    pitch_gains: [0.5181, 0.0, 0.9] #P,I,D
+    pitch_target: 40.0
+    heave_gains: [0.25, 0.0, 0.5] #P,I,D
+    depth_target: 8.0
+    roll_gains: [2.75, 0.0, 3.75] #P,I,D
+    roll_target: 0.0
     speed: 0.25
+
 
 
     
