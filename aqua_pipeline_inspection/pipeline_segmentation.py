@@ -8,7 +8,7 @@ from torchvision import models
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from aqua_pipeline_inspection.DeepLabv3.deeplabv3 import DeepLabv3
 import time
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32MultiArray
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
 
@@ -22,8 +22,8 @@ class pipeline_segmentation(Node):
             '/camera/back/image_raw/compressed',
             self.camera_callback,
             10)
-        self.command_publisher = self.create_publisher(Float32, '/pipeline/error', 10)
-        self.command = Float32()
+        self.command_publisher = self.create_publisher(Float32MultiArray, '/pipeline_parameters', 10)
+        self.command = Float32MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
         self.img_size = (300,400)
         self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3/best.pt')
@@ -62,7 +62,7 @@ class pipeline_segmentation(Node):
 
         #calculate error
         errors = self.line_to_error(r, theta)
-
+        
         #kalman filter predict
         self.kalman.predict()
 
@@ -72,22 +72,43 @@ class pipeline_segmentation(Node):
         else:
             self.kalman.update(errors[1])
 
-        #publish error/command
+        #read current error from kalman filter
         self.current_error = self.kalman.x[0] 
-        self.command.data = self.current_error
+        
+        #calculate center of line segment
+        p1 = self.error_to_boundary_point(errors[0])  
+        p2 = self.error_to_boundary_point(errors[1])
+        centroid_x = (p1[0] + p2[0]) / 2  
+        centroid_y = (p1[1] + p2[1]) / 2 
+
+        #convert theta to range [-pi,pi] and ensure r > 0
+        r, theta = self.convert_rt_to_range(r, theta)
+
+        #publish state
+        self.command.data = [self.current_error, r, theta, centroid_x, centroid_y]
         self.command_publisher.publish(self.command)
 
-        #display waypoint
+        #display waypoint and center
         waypoint = self.error_to_boundary_point(self.current_error)       
         cv2.circle(pred, (waypoint[0], waypoint[1]), 5, 0, 2)
+        cv2.circle(pred, (int(centroid_x), int(centroid_y)), 5, 0, 2)
         cv2.imshow('Pipeline Detection', pred)
-        # cv2.imwrite('waypoint.png', pred)
         cv2.waitKey(1)
         
         t1 = time.time()
         print('Processing time: ', (t1 - t0))
         return
 
+    def convert_rt_to_range(self, r, theta):
+        if r < 0:
+            r = -r
+            theta -= np.pi
+        while theta < -np.pi:
+            theta += 2*np.pi
+        while theta > np.pi:
+            theta -= 2*np.pi
+        return r, theta
+    
     def load_model(self, n_classes):
         model = models.segmentation.deeplabv3_resnet101(
             pretrained=True, progress=True)
@@ -105,12 +126,12 @@ class pipeline_segmentation(Node):
         if theta != 0:
             #right border of image
             y = (r - w*np.cos(theta))/np.sin(theta)
-            if y > 0 and y < h:
+            if y > 0 and y <= h:
                 errors.append(int(w/2 + y))
 
             #left border of image
             y = r/np.sin(theta)
-            if y > 0 and y < h:
+            if y > 0 and y <= h:
                 errors.append(int(-w/2 - y))
 
         #bottom border of image
@@ -123,7 +144,7 @@ class pipeline_segmentation(Node):
         
         #top border of image
         x = r/np.cos(theta)
-        if x > 0 and x < w:
+        if x >= 0 and x <= w:
             errors.append(int(x - w/2))
 
         return errors
@@ -131,11 +152,11 @@ class pipeline_segmentation(Node):
     def error_to_boundary_point(self, error):
         w = self.img_size[1]
         h = self.img_size[0]
-        if error > -w/2 and error < w/2: #top
+        if error >= -w/2 and error <= w/2: #top
             return [int(error + w/2),0]
-        elif error > w/2 and error < w/2 + h: #right
+        elif error > w/2 and error <= w/2 + h: #right
             return [w, int(error - w/2)]
-        elif error < -w/2 and error > -w/2 - h: #left
+        elif error < -w/2 and error >= -w/2 - h: #left
             return [0, int(-error - w/2)]
         elif error > 0: #bottom
             return [int(h + w/2 + w - error), h]

@@ -30,8 +30,8 @@ setup(
             'manual_controller = aqua_pipeline_inspection.manual_controller:main',
             'yolo_detector = aqua_pipeline_inspection.yolo_detector:main',
             'pipeline_segmentation = aqua_pipeline_inspection.pipeline_segmentation:main',
-            'pid_pipeline_inspection = aqua_pipeline_inspection.pid_pipeline_inspection:main'
-
+            'pid_pipeline_inspection = aqua_pipeline_inspection.pid_pipeline_inspection:main',
+            'dqn_controller = aqua_pipeline_inspection.dqn_controller:main',
         ],
     },
 )
