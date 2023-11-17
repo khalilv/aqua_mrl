@@ -15,10 +15,10 @@ class pid_pipeline_inspection(Node):
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', 10)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, 10)
-        self.pipeline_error_subscriber = self.create_subscription(
+        self.pipeline_parameter_subscriber = self.create_subscription(
             Float32MultiArray, 
-            '/pipeline/error', 
-            self.pipeline_error_callback, 
+            '/pipeline/parameters', 
+            self.pipeline_parameters_callback, 
             10)
         self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, 10)
 
@@ -45,13 +45,13 @@ class pid_pipeline_inspection(Node):
         #trajectory recording
         self.record_trajectory = True
         self.trajectory = []
-        self.save_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/'
+        self.save_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pid/'
         self.num_trajectories = len(os.listdir(self.save_path))
         
         #target trajectory
         self.offset_x = 47.14558
         self.offset_z = -19.43558
-        self.target_trajectory = '/usr/local/data/kvirji/AQUA/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pipeline_center.npy'
+        self.target_trajectory = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pipeline_center.npy'
         with open(self.target_trajectory, 'rb') as f:
             self.pipeline_x = np.load(f) + self.offset_x
             self.pipeline_z = np.load(f) + self.offset_z
@@ -103,8 +103,8 @@ class pid_pipeline_inspection(Node):
         b = z2 - m * x2
         return m*x + b
     
-    def pipeline_error_callback(self, error):
-        if error.data[0] >= self.img_size[0] + self.img_size[1] + 1: #stop command = w + h + 1
+    def pipeline_parameters_callback(self, error):
+        if error.data.count(-1) == len(error.data): #stop command are all -1
             print('Recieved stop command from vision module')
             self.finish(False)
         else:
@@ -124,7 +124,7 @@ class pid_pipeline_inspection(Node):
 
         if self.record_trajectory:
             print('Saving trajectory')
-            with open(self.save_path + 'pid_trajectory_{}.npy'.format(str(self.num_trajectories)), 'wb') as f:
+            with open(self.save_path + 'trajectory_{}.npy'.format(str(self.num_trajectories)), 'wb') as f:
                 np.save(f, np.array(self.trajectory))
             self.num_trajectories += 1
         
@@ -132,7 +132,7 @@ class pid_pipeline_inspection(Node):
         return
     
     def reset(self):
-        print('Resetting simulation')
+        print('-------------- Resetting simulation --------------')
 
         self.reset_client.call_async(self.reset_req)
         

@@ -20,8 +20,8 @@ class dqn_controller(Node):
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, 10)
         self.pipeline_error_subscriber = self.create_subscription(
             Float32MultiArray, 
-            '/pipeline/error', 
-            self.pipeline_error_callback, 
+            '/pipeline/parameters', 
+            self.pipeline_param_callback, 
             10)
         self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, 10)
 
@@ -35,13 +35,37 @@ class dqn_controller(Node):
         self.measured_depth = self.target_depth #to avoid any sporadic behaviour at the start
         
         #dqn controller for yaw 
-        self.dqn = DQN(5,3)
-        self.num_episodes = 10
-        self.episode = 0
+        self.action_space = 5
+        self.observation_space = 3
+        self.yaw_actions = np.linspace(-0.5,0.5,self.action_space)
+        self.dqn = DQN(self.action_space, self.observation_space) 
+        self.num_episodes = 600
         self.state = None
         self.action = None
         self.next_state = None
         self.reward = None
+        self.episode_return = 0
+
+        self.root_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/dqn/'
+        self.checkpoint_experiment = 0
+        try:
+            self.save_path = os.path.join(self.root_path, str(self.checkpoint_experiment))
+            eps = len(os.listdir(self.save_path)) - 1
+            checkpoint_path = self.save_path + '/episode_' + str(eps) + '.pt'
+            checkpoint = torch.load(checkpoint_path, map_location=self.dqn.device)
+            self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
+            self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
+            self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.dqn.steps_done = checkpoint['training_steps']
+            self.episode = eps + 1
+            print('Weights loaded: starting from episode ', self.episode)
+        except:
+            print('No checkpoint found: starting from episode 0')
+            self.new_checkpoint_experiment = len(os.listdir(self.root_path))
+            os.mkdir(os.path.join(self.root_path, str(self.new_checkpoint_experiment)))
+            self.save_path = os.path.join(self.root_path, str(self.new_checkpoint_experiment))
+            self.episode = 0
+
 
         #initialize command
         self.command = Command()
@@ -54,15 +78,13 @@ class dqn_controller(Node):
         self.img_size = (300, 400)
         
         #trajectory recording
-        self.record_trajectory = True
         self.trajectory = []
-        self.save_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/dqn/'
-        self.num_trajectories = len(os.listdir(self.save_path))
-        
+
+
         #target trajectory
         self.offset_x = 47.14558
         self.offset_z = -19.43558
-        self.target_trajectory = '/usr/local/data/kvirji/AQUA/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pipeline_center.npy'
+        self.target_trajectory = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pipeline_center.npy'
         with open(self.target_trajectory, 'rb') as f:
             self.pipeline_x = np.load(f) + self.offset_x
             self.pipeline_z = np.load(f) + self.offset_z
@@ -72,7 +94,7 @@ class dqn_controller(Node):
         self.max_y_error_to_target = 3.0 #if y distance to pipeline > max => halt
 
         #end of pipe
-        self.finish_line_x = -50# 25 + self.offset_x #25 + offset
+        self.finish_line_x = 25 + self.offset_x #25 + offset
 
         #reset command
         self.reset_client = self.create_client(EmptyWorkaround, '/simulator/reset_robot')
@@ -114,7 +136,7 @@ class dqn_controller(Node):
         b = z2 - m * x2
         return m*x + b
     
-    def pipeline_error_callback(self, error):
+    def pipeline_param_callback(self, error):
         pid_error = error.data[0]
         theta = error.data[2]
         centroid_x = error.data[3]
@@ -125,6 +147,7 @@ class dqn_controller(Node):
         else:
             self.next_state = torch.tensor([theta, centroid_x, centroid_y], dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             reward = self.reward_calculation(theta, centroid_x, centroid_y)
+            self.episode_return += reward
             self.reward = torch.tensor([reward], device=self.dqn.device)
             self.action = self.dqn.select_action(self.next_state)
             if self.state is not None:
@@ -142,17 +165,9 @@ class dqn_controller(Node):
                 target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
             self.dqn.target_net.load_state_dict(target_net_state_dict)
             
-            yaw_action = self.action.detach().cpu().numpy()[0][0]
-            if yaw_action == 0:
-                self.command.yaw = -0.5
-            if yaw_action == 1:
-                self.command.yaw = -0.25
-            if yaw_action == 2:
-                self.command.yaw = 0.0
-            if yaw_action == 3:
-                self.command.yaw = 0.25
-            if yaw_action == 4:
-                self.command.yaw = 0.5
+            yaw_action_idx = self.action.detach().cpu().numpy()[0][0]
+            self.command.yaw = self.yaw_actions[yaw_action_idx]
+            
             self.command.speed = 0.25 #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
             self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
@@ -161,33 +176,48 @@ class dqn_controller(Node):
             return 
     
     def reward_calculation(self, theta, centroid_x, centroid_y):
-        x_bounds = [25 - self.img_size[1]/2, 25 + self.img_size[1]/2]
-        y_bounds = [25 - self.img_size[0]/2, 25 + self.img_size[0]/2]
-        if np.abs(theta) < 15*np.pi/180 and centroid_x > x_bounds[0] and centroid_x < x_bounds[1] and centroid_y > y_bounds[0] and centroid_y < y_bounds[1]:
-            return 0
+        cx = self.img_size[1]/2
+        cy = self.img_size[0]/2
+        xtol = 25 #px
+        ytol = 25 #px
+        ttol = 0.25 #rad
+        if np.abs(theta) < ttol and centroid_x > xtol - cx and centroid_x < xtol + cx and centroid_y > ytol - cy and centroid_y < ytol + cy:
+            return 1
         else:
-            return -1
+            return 0
         
 
     def finish(self, complete):
         if complete:
             print('Goal reached')
-            self.dqn.memory.push(self.state, self.action, None, torch.tensor([10], device=self.dqn.device))
+            reward = 10
+            self.episode_return += reward
         else:
             print('Goal not reached')
-            self.dqn.memory.push(self.state, self.action, None, torch.tensor([-10], device=self.dqn.device))
+            reward = -10
+            self.episode_return += reward
+        print('Episode return: ', self.episode_return)
+        if self.state is not None:
+            self.dqn.memory.push(self.state, self.action, None, torch.tensor([reward], device=self.dqn.device))
         
-        if self.record_trajectory:
-            print('Saving trajectory')
-            with open(self.save_path + 'trajectory_{}.npy'.format(str(self.num_trajectories)), 'wb') as f:
-                np.save(f, np.array(self.trajectory))
-            self.num_trajectories += 1
-        
-        self.reset()
+        print('Saving trajectory')       
+        torch.save({
+            'training_steps': self.dqn.steps_done,
+            'episode_returns': self.episode_return,
+            'model_state_dict_policy': self.dqn.policy_net.state_dict(),
+            'model_state_dict_target': self.dqn.target_net.state_dict(),
+            'optimizer_state_dict': self.dqn.optimizer.state_dict(),
+            'trajectory': np.array(self.trajectory)
+            }, self.save_path +  '/episode_{}.pt'.format(str(self.episode)))
+
+        if self.episode < self.num_episodes:
+            self.reset()
+        else:
+            rclpy.shutdown()
         return
     
     def reset(self):
-        print('Resetting simulation')
+        print('-------------- Resetting simulation --------------')
 
         self.reset_client.call_async(self.reset_req)
         
@@ -195,10 +225,13 @@ class dqn_controller(Node):
         self.measured_roll_angle = 0.0
         self.measured_pitch_angle = 0.0
         self.measured_depth = self.target_depth
+        
+        #increment episode and reset returns
+        self.episode_return = 0
+        self.episode += 1
 
         #reset trajectory
         self.trajectory = []
-        self.episode += 1
         self.state = None
         sleep(0.5)
         return
