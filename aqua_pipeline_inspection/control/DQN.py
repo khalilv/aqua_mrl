@@ -27,35 +27,52 @@ class ReplayMemory(object):
 
 class DQNNetwork(nn.Module):
 
-    def __init__(self, n_observations, n_actions):
+    def __init__(self, history, n_actions):
         super(DQNNetwork, self).__init__()
-        self.layer1 = nn.Linear(n_observations, 128)
-        self.layer2 = nn.Linear(128, 128)
-        self.layer3 = nn.Linear(128, n_actions)
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels=history, out_channels=32, kernel_size=8, stride=4),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1),
+            nn.ReLU(),
+        )
+        self.linear = nn.Sequential(
+            nn.Linear(in_features= 7*7*64, out_features=512),
+            nn.ReLU(),
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(in_features=512, out_features=256),
+            nn.ReLU(),
+            nn.Linear(in_features=256, out_features=n_actions),
+        )
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        x = F.relu(self.layer1(x))
-        x = F.relu(self.layer2(x))
-        return self.layer3(x)
+        x = self.conv(x)
+        x = x.reshape((-1, 7 * 7 * 64))
+        x = self.linear(x)
+        x = self.fc(x)
+        return x    
     
 class DQN:
 
-    def __init__(self, n_actions, n_observations) -> None:
+    def __init__(self, n_actions, history_size) -> None:
         self.BATCH_SIZE = 128
         self.GAMMA = 0.99
-        self.EPS_START = 0.9
+        self.EPS_START = 0.8
         self.EPS_END = 0.05
         self.EPS_DECAY = 1000
         self.TAU = 0.005
         LR = 1e-4
         self.MEMORY_SIZE = 10000
         self.n_actions = n_actions
-        self.n_observations = n_observations
+        self.history_size = history_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.policy_net = DQNNetwork(self.n_observations, self.n_actions).to(self.device)
-        self.target_net = DQNNetwork(self.n_observations, self.n_actions).to(self.device)
+        self.policy_net = DQNNetwork(self.history_size, self.n_actions).to(self.device)
+        self.target_net = DQNNetwork(self.history_size, self.n_actions).to(self.device)
         self.target_net.load_state_dict(self.target_net.state_dict())
         self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=LR, amsgrad=True)
         self.memory = ReplayMemory(self.MEMORY_SIZE)

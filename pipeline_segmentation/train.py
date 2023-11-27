@@ -182,7 +182,7 @@ def train(args=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_root', default='simulation_dataset/', type=str,
+    parser.add_argument('--dataset_root', default='simulation_rope_dataset/', type=str,
                         help='path to dataset root')
     parser.add_argument('--save_path', default='models/', type=str,
                         help='path to save the model')

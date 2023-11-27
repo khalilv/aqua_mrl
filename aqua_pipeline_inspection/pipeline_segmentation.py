@@ -19,13 +19,12 @@ class pipeline_segmentation(Node):
             CompressedImage,
             '/camera/back/image_raw/compressed',
             self.camera_callback,
-            10)
-        self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/pipeline/segmentation', 10)
+            5)
+        self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/pipeline/segmentation', 5)
         self.seg_map = UInt8MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
         self.img_size = (300,400)
-        self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3/best.pt')
-        self.current_error = 0
+        self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3_rope/best.pt')
 
         cv2.namedWindow("Pipeline Detection", cv2.WINDOW_AUTOSIZE)
         print('Initialized: pipeline_segmentation')
@@ -39,6 +38,8 @@ class pipeline_segmentation(Node):
         #segment image
         pred = self.model.segment(img)
         pred = pred.astype(np.uint8)
+        pred = cv2.resize(pred, (84,84))
+        
 
         #publish state
         self.seg_map.data = pred.flatten().tolist()
