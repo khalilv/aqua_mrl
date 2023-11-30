@@ -1,51 +1,45 @@
 import numpy as np 
 from matplotlib import pyplot as plt
+import os 
 
-experiment = 3
-trajectory_file = '/usr/local/data/kvirji/AQUA/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pid_trajectory_{}.npy'.format(str(experiment))
-save_path = '/usr/local/data/kvirji/AQUA/aqua_pipeline_inspection/aqua_pipeline_inspection/plots/pid_trajectory_{}.png'.format(str(experiment))
-target_trajectory = '/usr/local/data/kvirji/AQUA/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pipeline_center.npy'
+def episodic_returns(dir):
+    returns = []
+    for file_path in sorted(os.listdir(dir)):
+        # check if current file_path is a file
+        file = os.path.join(dir, file_path)
+        with open(file, 'rb') as f:
+            r = np.load(f)
+            returns.append(np.sum(r))
+    plt.plot(returns)
+    plt.xlabel('Episode')
+    plt.ylabel('Returns')
+    plt.title('Episodic Returns')
+    plt.show()
 
-offset_x = 47.14558
-offset_z = -19.43558
-offset_y = -99.88829
-target_depth = -10.0
+def plot_trajectory(file, target):
+    with open(file, 'rb') as f:
+        _ = np.load(f)
+        trajectory = np.load(f)
+        xl = trajectory[:,0]
+        yl = trajectory[:,1]
+        zl = trajectory[:,2]
 
-with open(target_trajectory, 'rb') as f:
-    pipeline_x = np.load(f) + offset_x
-    pipeline_z = np.load(f) + offset_z
+    with open(target, 'rb') as f:
+        xt = np.load(f)
+        yt = np.load(f)
+        zt = np.load(f)
 
-with open(trajectory_file, 'rb') as f:
-    trajectory = np.load(f)
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    ax.plot3D(xt, zt, yt, 'green', label='Target')
+    ax.plot3D(xl, zl, yl, 'yellow', label='Trajectory')
 
-def get_z_targ(xl, xt, zt):
-    z_target = []
-    for x in xl[:]:
-        ind = np.argwhere(xt >= x)[0][0]
-        x1 = xt[ind - 1]
-        z1 = zt[ind - 1]
-        x2 = xt[ind]
-        z2 = zt[ind]
-        m = (z2 - z1) / (x2 - x1)
-        b = z2 - m * x2
-        z_target.append(m*x + b)
-    return z_target
+    plt.legend()
+    plt.show()
 
-def mse(traj_y, traj_z, targ_y, targ_z):
-    return np.square(np.subtract(traj_y,targ_y)).mean() + np.square(np.subtract(traj_z,targ_z)).mean()
+directory = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/dqn/3'
+file = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/dqn/2/episode_00074.npy'
+target = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/targets/rope_center.npy'
 
-xl = trajectory[:,0]
-yl = trajectory[:,1]
-zl = trajectory[:,2]
-
-yt = np.zeros(len(xl)) + target_depth
-zt = get_z_targ(xl, pipeline_x, pipeline_z)
-
-fig = plt.figure()
-ax = plt.axes(projection='3d')
-ax.plot3D(xl, zl, yl, 'blue', label='Trajectory')
-ax.plot3D(xl, zt, yt, 'green', label='Target')
-MSE = mse(yl,zl,yt,zt)
-plt.title('MSE: ' + str(MSE))
-plt.legend()
-plt.show()
+episodic_returns(directory)
+plot_trajectory(file, target)

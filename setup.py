@@ -33,6 +33,8 @@ setup(
             'pipeline_parameters = aqua_pipeline_inspection.pipeline_parameters:main',
             'pid_pipeline_inspection = aqua_pipeline_inspection.pid_pipeline_inspection:main',
             'dqn_controller = aqua_pipeline_inspection.dqn_controller:main',
+            'dqn_controller_eval = aqua_pipeline_inspection.dqn_controller_eval:main',
+
         ],
     },
 )

@@ -5,6 +5,10 @@ pipeline_dataset/
 rope_dataset/
 pipeline_segmentation/simulation_pipeline_dataset/
 pipeline_segmentation/simulation_rope_dataset/
+pipeline_segmentation/simulation_rope_dataset_v2/
 aqua_pipeline_inspection/YOLOv7/weights/
 pipeline_segmentation/models/
+aqua_pipeline_inspection/checkpoints
+aqua_pipeline_inspection/evaluations
+aqua_pipeline_inspection/trajectories
 
