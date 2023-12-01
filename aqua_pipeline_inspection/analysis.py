@@ -12,8 +12,8 @@ def episodic_returns(dir):
             returns.append(np.sum(r))
     plt.plot(returns)
     plt.xlabel('Episode')
-    plt.ylabel('Returns')
-    plt.title('Episodic Returns')
+    plt.ylabel('Total Reward')
+    plt.title('Episodic Rewards')
     plt.show()
 
 def plot_trajectory(file, target):
@@ -37,7 +37,7 @@ def plot_trajectory(file, target):
     plt.legend()
     plt.show()
 
-directory = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/dqn/3'
+directory = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/dqn/0'
 file = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/dqn/2/episode_00074.npy'
 target = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/targets/rope_center.npy'
 

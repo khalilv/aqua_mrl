@@ -24,7 +24,7 @@ class pipeline_segmentation(Node):
         self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/pipeline/segmentation', self.queue_size)
         self.seg_map = UInt8MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
-        self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3_rope/best.pt')
+        self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3_ropev2/best.pt')
         self.img_size = (32, 32)
         
         #online dataset collection
@@ -61,16 +61,6 @@ class pipeline_segmentation(Node):
         t1 = time.time()
         print('Processing time: ', (t1 - t0))
         return
-   
-    def load_model(self, n_classes):
-        model = models.segmentation.deeplabv3_resnet101(
-            pretrained=True, progress=True)
-        # freeze weights
-        for param in model.parameters():
-            param.requires_grad = False
-        # replace classifier
-        model.classifier = DeepLabHead(2048, num_classes=n_classes)
-        return model
 
 def main(args=None):
     rclpy.init(args=args)

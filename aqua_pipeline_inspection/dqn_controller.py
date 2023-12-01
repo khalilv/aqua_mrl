@@ -42,7 +42,7 @@ class dqn_controller(Node):
         #dqn controller for yaw and pitch 
         self.yaw_action_space = 3
         self.pitch_action_space = 3
-        self.history_size = 15
+        self.history_size = 10
         self.yaw_actions = np.linspace(-0.25, 0.25, self.yaw_action_space)
         self.pitch_actions = np.linspace(-0.005, 0.005, self.pitch_action_space)
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
@@ -63,11 +63,11 @@ class dqn_controller(Node):
         self.img_size = (32, 32)
         self.template = np.zeros(self.img_size)
         half = int(self.img_size[0]/2)
-        self.template[:,half-1:half+1] = 1
+        self.template[:,half-2:half+2] = 1
         self.template = self.template.astype(np.uint8)
 
         self.root_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/checkpoints/dqn/'
-        self.checkpoint_experiment = 3
+        self.checkpoint_experiment = 0
         try:
             self.save_path = os.path.join(self.root_path, str(self.checkpoint_experiment))
             self.traj_save_path = os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.checkpoint_experiment))
@@ -107,8 +107,9 @@ class dqn_controller(Node):
             self.rope_z = np.load(f)
         
         #define max error to target trajectory
-        self.max_error_to_target = 3.75
+        self.max_error_line = (1.225, 18.55)
         self.depth_range = [-6, -14.5]
+
 
         #end of trajectory
         self.finish_line_x = 25
@@ -137,11 +138,6 @@ class dqn_controller(Node):
             self.flush_commands = 0
             self.complete = True
             self.finished = True
-        elif np.abs(dist_to_line) > self.max_error_to_target:
-            print('Drifted far from target z trajectory')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -152,12 +148,20 @@ class dqn_controller(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = False
+        elif np.abs(dist_to_line) > self.get_max_error_from_depth(imu.y):
+            print('Drifted far from target z trajectory')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
     
     def calculate_roll(self, imu):
         return imu.roll
+    
+    def get_max_error_from_depth(self, depth):
+        return self.max_error_line[0]*depth + self.max_error_line[1]
        
     def get_target_line(self, x):
         ind = np.argwhere(self.rope_x >= x)[0][0]
@@ -190,7 +194,7 @@ class dqn_controller(Node):
         if len(self.history_queue) < self.history_size:
             self.history_queue.append(seg_map)
         else:
-            t0 = time()
+            # t0 = time()
 
             self.history_queue.pop()
             self.history_queue.append(seg_map)
@@ -199,11 +203,13 @@ class dqn_controller(Node):
             reward = self.reward_calculation(seg_map)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], device=self.dqn.device)
-            self.action = self.dqn.select_action(self.next_state)
-            if self.state is not None:
+
+            if self.state is not None and self.action is not None:
                 self.dqn.memory.push(self.state, self.action, self.next_state, self.reward)
-        
+
+            self.action = self.dqn.select_action(self.next_state)       
             self.state = self.next_state
+
             # Perform one step of the optimization (on the policy network)
             loss = self.dqn.optimize()
             if loss is not None:
@@ -226,7 +232,7 @@ class dqn_controller(Node):
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
             self.command_publisher.publish(self.command)
 
-            t1 = time()
+            # t1 = time()
             # print('Processing time: ', (t1 - t0))
         return 
     
@@ -296,6 +302,7 @@ class dqn_controller(Node):
         
         #reset state and history queue
         self.state = None
+        self.action = None
         self.history_queue = []
 
         #reset flush queues 

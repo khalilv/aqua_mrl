@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
 from ir_aquasim_interfaces.srv import EmptyWorkaround
-from aqua_pipeline_inspection.control.PID import AnglePID, PID
+from aqua_pipeline_inspection.control.PID import AnglePID
 from aqua_pipeline_inspection.control.DQN import DQN
 from std_msgs.msg import UInt8MultiArray
 import numpy as np 
@@ -42,12 +42,11 @@ class dqn_controller_eval(Node):
         #dqn controller for yaw and pitch 
         self.yaw_action_space = 3
         self.pitch_action_space = 3
-        self.history_size = 15
+        self.history_size = 10
         self.yaw_actions = np.linspace(-0.25, 0.25, self.yaw_action_space)
         self.pitch_actions = np.linspace(-0.005, 0.005, self.pitch_action_space)
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
         self.num_eval_episodes = 10
-        self.action = None
         self.reward = None
         self.history_queue = []
         self.episode_rewards = []
@@ -59,8 +58,8 @@ class dqn_controller_eval(Node):
         self.template[:,half-2:half+2] = 1
         self.template = self.template.astype(np.uint8)
 
-        self.checkpoint_experiment = 3
-        self.checkpoint_episode = 30
+        self.checkpoint_experiment = 0
+        self.checkpoint_episode = 0
         self.checkpoint_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/checkpoints/dqn/{}/episode_{}.pt'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
         self.save_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/evaluations/{}_episode_{}/'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
         if not os.path.exists(self.save_path):
@@ -93,7 +92,7 @@ class dqn_controller_eval(Node):
             self.rope_z = np.load(f)
         
         #define max error to target trajectory
-        self.max_error_to_target = 3.75
+        self.max_error_line = (1.225, 18.55)
         self.depth_range = [-6, -14.5]
 
         #end of trajectory
@@ -123,11 +122,6 @@ class dqn_controller_eval(Node):
             self.flush_commands = 0
             self.complete = True
             self.finished = True
-        elif np.abs(dist_to_line) > self.max_error_to_target:
-            print('Drifted far from target z trajectory')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -138,12 +132,21 @@ class dqn_controller_eval(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = False
+        elif np.abs(dist_to_line) > self.get_max_error_from_depth(imu.y):
+            print('Drifted far from target z trajectory')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
     
     def calculate_roll(self, imu):
         return imu.roll
+    
+    def get_max_error_from_depth(self, depth):
+        return self.max_error_line[0]*depth + self.max_error_line[1]
+       
        
     def get_target_line(self, x):
         ind = np.argwhere(self.rope_x >= x)[0][0]
@@ -182,9 +185,9 @@ class dqn_controller_eval(Node):
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             reward = self.reward_calculation(seg_map)
             self.episode_rewards.append(reward)
-            self.action = self.dqn.select_eval_action(state)
+            action = self.dqn.select_eval_action(state)
 
-            action_idx = self.action.detach().cpu().numpy()[0][0]
+            action_idx = action.detach().cpu().numpy()[0][0]
             # print(action_idx, '->', (int(action_idx/3), action_idx % 3))
             self.command.pitch = self.pitch_actions[int(action_idx/3)]
             self.command.yaw = self.yaw_actions[action_idx % 3]
@@ -199,7 +202,7 @@ class dqn_controller_eval(Node):
         intersection = np.logical_and(seg_map, self.template)
         union = np.logical_or(seg_map, self.template)
         iou = np.sum(intersection) / np.sum(union)
-        return iou - 0.05
+        return iou - 0.025
         
 
     def finish(self):
