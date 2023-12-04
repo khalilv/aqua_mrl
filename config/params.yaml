@@ -1,7 +1,7 @@
 underwater_adversary_command_publisher:
   ros__parameters:
     current_magnitude: 0.5
-pid_controllers:
+pid_tuning:
   ros__parameters:
     pitch_gains: [0.5181, 0.0, 0.9] #P,I,D
     pitch_target: 40.0

@@ -9,8 +9,8 @@ def generate_launch_description():
 
     node=Node(
         package = 'aqua_rl',
-        name = 'pid_controllers',
-        executable = 'pid_controllers',
+        name = 'pid_tuning',
+        executable = 'pid_tuning',
         parameters = [config], 
         output='screen',
         emulate_tty=True,
