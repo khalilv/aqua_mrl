@@ -8,17 +8,17 @@ import numpy as np
 import os
 from time import sleep
 
-class pid_pipeline_inspection(Node):
+class pid_controller(Node):
     def __init__(self):
-        super().__init__('pid_pipeline_inspection')
+        super().__init__('pid_controller')
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', 10)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, 10)
-        self.pipeline_parameter_subscriber = self.create_subscription(
+        self.parameter_subscriber = self.create_subscription(
             Float32MultiArray, 
-            '/pipeline/parameters', 
-            self.pipeline_parameters_callback, 
+            '/pid/parameters', 
+            self.parameters_callback, 
             10)
         self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, 10)
 
@@ -45,13 +45,13 @@ class pid_pipeline_inspection(Node):
         #trajectory recording
         self.record_trajectory = True
         self.trajectory = []
-        self.save_path = 'src/aqua_rl/aqua_rl/trajectories/pid/'
+        self.save_path = 'src/aqua_rl/trajectories/pid/'
         self.num_trajectories = len(os.listdir(self.save_path))
         
         #target trajectory
         self.offset_x = 47.14558
         self.offset_z = -19.43558
-        self.target_trajectory = 'src/aqua_rl/aqua_rl/trajectories/pipeline_center.npy'
+        self.target_trajectory = 'src/aqua_rl/trajectories/targets/pipeline_center.npy'
         with open(self.target_trajectory, 'rb') as f:
             self.pipeline_x = np.load(f) + self.offset_x
             self.pipeline_z = np.load(f) + self.offset_z
@@ -66,7 +66,7 @@ class pid_pipeline_inspection(Node):
         #reset command
         self.reset_client = self.create_client(EmptyWorkaround, '/simulator/reset_robot')
         self.reset_req = EmptyWorkaround.Request()
-        print('Initialized: pid pipeline inspection')
+        print('Initialized: PID controller')
   
     def imu_callback(self, imu):
         self.measured_roll_angle = self.calculate_roll(imu)
@@ -103,7 +103,7 @@ class pid_pipeline_inspection(Node):
         b = z2 - m * x2
         return m*x + b
     
-    def pipeline_parameters_callback(self, error):
+    def parameters_callback(self, error):
         if error.data.count(-1) == len(error.data): #stop command are all -1
             print('Recieved stop command from vision module')
             self.finish(False)
@@ -150,7 +150,7 @@ class pid_pipeline_inspection(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    node = pid_pipeline_inspection()
+    node = pid_controller()
 
     rclpy.spin(node)
 

@@ -6,7 +6,7 @@ from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from torchinfo import summary
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from datasets import PipelineDataset
+from datasets import SegmentationDataset
 from torch import nn, optim
 import numpy as np
 from ignite.metrics import Precision, Recall, Loss, Accuracy
@@ -66,7 +66,7 @@ def train(args=None):
     model = load_model(2)
     model.to(device)
     summary(model)
-    datasets = {x: PipelineDataset(root=root,
+    datasets = {x: SegmentationDataset(root=root,
                                    split=x, transforms=data_transforms[x]) for x in ['train', 'valid']}
     train_sampler = RandomSampler(datasets['train'])
     valid_sampler = SequentialSampler(datasets['valid'])

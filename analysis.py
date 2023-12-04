@@ -37,9 +37,9 @@ def plot_trajectory(file, target):
     plt.legend()
     plt.show()
 
-directory = 'src/aqua_rl/aqua_rl/trajectories/dqn/0'
-file = 'src/aqua_rl/aqua_rl/trajectories/dqn/2/episode_00074.npy'
-target = 'src/aqua_rl/aqua_rl/trajectories/targets/rope_center.npy'
+directory = './trajectories/dqn/0'
+file = './trajectories/dqn/2/episode_00074.npy'
+target = './trajectories/targets/rope_center.npy'
 
 episodic_returns(directory)
 plot_trajectory(file, target)

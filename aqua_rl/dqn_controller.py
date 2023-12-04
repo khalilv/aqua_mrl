@@ -19,10 +19,10 @@ class dqn_controller(Node):
         self.queue_size = 5
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
-        self.pipeline_segmentation_subscriber = self.create_subscription(
+        self.segmentation_subscriber = self.create_subscription(
             UInt8MultiArray, 
-            '/pipeline/segmentation', 
-            self.pipeline_segmentation_callback, 
+            '/segmentation', 
+            self.segmentation_callback, 
             self.queue_size)
         
         #flush queues
@@ -66,7 +66,7 @@ class dqn_controller(Node):
         self.template[:,half-2:half+2] = 1
         self.template = self.template.astype(np.uint8)
 
-        self.root_path = 'src/aqua_rl/aqua_rl/checkpoints/dqn/'
+        self.root_path = 'src/aqua_rl/checkpoints/dqn/'
         self.checkpoint_experiment = 0
         try:
             self.save_path = os.path.join(self.root_path, str(self.checkpoint_experiment))
@@ -100,7 +100,7 @@ class dqn_controller(Node):
         self.command.heave = 0.0
                
         #target trajectory
-        self.target_trajectory = 'src/aqua_rl/aqua_rl/trajectories/targets/rope_center.npy'
+        self.target_trajectory = 'src/aqua_rl/trajectories/targets/rope_center.npy'
         with open(self.target_trajectory, 'rb') as f:
             self.rope_x = np.load(f) 
             self.rope_y = np.load(f)
@@ -173,7 +173,7 @@ class dqn_controller(Node):
         b = z2 - m * x2
         return m, b
     
-    def pipeline_segmentation_callback(self, seg_map):
+    def segmentation_callback(self, seg_map):
 
         #flush image queue
         if self.flush_segmentation < self.flush_steps:

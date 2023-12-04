@@ -13,20 +13,20 @@ from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
 
 
-class pipeline_parameters(Node):
+class pid_parameters(Node):
 
     def __init__(self):
-        super().__init__('pipeline_parameters')
+        super().__init__('pid_parameters')
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
             '/camera/back/image_raw/compressed',
             self.camera_callback,
             10)
-        self.command_publisher = self.create_publisher(Float32MultiArray, '/pipeline/parameters', 10)
+        self.command_publisher = self.create_publisher(Float32MultiArray, '/pid/parameters', 10)
         self.command = Float32MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
         self.img_size = (300,400)
-        self.model = DeepLabv3('src/aqua_rl/pipeline_segmentation/models/deeplabv3_mobilenetv3/best.pt')
+        self.model = DeepLabv3('src/aqua_rl/segmentation_module/models/deeplabv3_mobilenetv3/best.pt')
         self.current_error = 0
 
         #init kalman filter for tracking waypoint
@@ -39,8 +39,8 @@ class pipeline_parameters(Node):
         self.kalman.R = 7.5 #measurement noise in px
         self.kalman.Q = Q_discrete_white_noise(dim=2, dt=0.02, var=0.13)
 
-        cv2.namedWindow("Pipeline Detection", cv2.WINDOW_AUTOSIZE)
-        print('Initialized: pipeline_parameters')
+        cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
+        print('Initialized: PID parameters')
 
     def camera_callback(self, msg):
         t0 = time.time()
@@ -56,7 +56,7 @@ class pipeline_parameters(Node):
         try:
             r, theta, _ = self.ransac(pred, tau = 15, iters = 20)
         except AssertionError:
-            print('No pipeline detected')
+            print('Nothing detected')
             self.command.data = [-1., -1., -1., -1., -1.] #send stop command as all -1 
             self.command_publisher.publish(self.command)
             return
@@ -87,7 +87,7 @@ class pipeline_parameters(Node):
         else:
             self.current_error = er
       
-        #publish pipeline parameter information
+        #publish parameter information
         self.command.data = [self.current_error, r, theta, cx, cy]
         self.command_publisher.publish(self.command)
 
@@ -96,7 +96,7 @@ class pipeline_parameters(Node):
         pred = np.stack((pred,)*3, axis=-1)    
         cv2.circle(pred, (waypoint[0], waypoint[1]), 5, (255,0,0), 2)
         cv2.circle(pred, (int(cx), int(cy)), 5, (0,0,255), 2)
-        cv2.imshow('Pipeline Detection', pred)
+        cv2.imshow('Segmentation Mask', pred)
         cv2.waitKey(1)
         
         t1 = time.time()
@@ -195,7 +195,7 @@ class pipeline_parameters(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    subscriber = pipeline_parameters()
+    subscriber = pid_parameters()
 
     rclpy.spin(subscriber)
 

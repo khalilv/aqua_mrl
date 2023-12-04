@@ -4,27 +4,25 @@ import cv_bridge
 from sensor_msgs.msg import CompressedImage
 from rclpy.node import Node
 import numpy as np
-from torchvision import models
-from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from aqua_rl.DeepLabv3.deeplabv3 import DeepLabv3
 import time
 from std_msgs.msg import UInt8MultiArray
 import os
 
-class pipeline_segmentation(Node):
+class segmentation(Node):
 
     def __init__(self):
-        super().__init__('pipeline_segmentation')
+        super().__init__('segmentation')
         self.queue_size = 5
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
             '/camera/back/image_raw/compressed',
             self.camera_callback,
             self.queue_size)
-        self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/pipeline/segmentation', self.queue_size)
+        self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/segmentation', self.queue_size)
         self.seg_map = UInt8MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
-        self.model = DeepLabv3('src/aqua_rl/pipeline_segmentation/models/deeplabv3_mobilenetv3_ropev2/best.pt')
+        self.model = DeepLabv3('src/aqua_rl/segmentation_module/models/deeplabv3_mobilenetv3_ropev2/best.pt')
         self.img_size = (32, 32)
         
         #online dataset collection
@@ -32,8 +30,8 @@ class pipeline_segmentation(Node):
         self.dataset_size = len(os.listdir(self.dataset_path))
         self.save_probability = 0.0
 
-        cv2.namedWindow("Pipeline Detection", cv2.WINDOW_AUTOSIZE)
-        print('Initialized: pipeline_segmentation')
+        cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
+        print('Initialized: segmentation module')
 
     def camera_callback(self, msg):
         t0 = time.time()
@@ -55,7 +53,7 @@ class pipeline_segmentation(Node):
         self.seg_map.data = pred.flatten().tolist()
         self.segmentation_publisher.publish(self.seg_map)
 
-        cv2.imshow('Pipeline Detection', pred * 255)
+        cv2.imshow('Segmentation Mask', pred * 255)
         cv2.waitKey(1)
         
         t1 = time.time()
@@ -64,7 +62,7 @@ class pipeline_segmentation(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    subscriber = pipeline_segmentation()
+    subscriber = segmentation()
 
     rclpy.spin(subscriber)
 

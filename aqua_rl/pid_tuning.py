@@ -4,9 +4,9 @@ from aqua_rl.control.PID import AnglePID, PID
 from aqua2_interfaces.msg import AquaPose, Command
 from std_msgs.msg import Float32
 
-class pid_controllers(Node):
+class pid_tuning(Node):
     def __init__(self):
-        super().__init__('pid_controllers')
+        super().__init__('pid_tuning')
         self.declare_parameters(namespace='',
                                 parameters=[
                                     ('roll_gains', [0.0,0.0,0.0]),
@@ -43,7 +43,7 @@ class pid_controllers(Node):
         self.command.heave = 0.0
         self.command.speed = self.speed
 
-        print('Initialized: PID controllers')
+        print('Initialized: PID tuning controllers')
 
     def imu_callback(self, imu):
         self.measured_roll_angle = self.calculate_roll(imu)
@@ -69,22 +69,7 @@ class pid_controllers(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    node = pid_controllers()
-
-    rclpy.spin(node)
-
-    node.destroy_node()
-    rclpy.shutdown()
-
-
-if __name__ == '__main__':
-    main()
-
-
-def main(args=None):
-    rclpy.init(args=args)
-
-    node = pid_controllers()
+    node = pid_tuning()
 
     rclpy.spin(node)
 

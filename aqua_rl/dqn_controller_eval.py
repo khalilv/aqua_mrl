@@ -19,10 +19,10 @@ class dqn_controller_eval(Node):
         self.queue_size = 5
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
-        self.pipeline_segmentation_subscriber = self.create_subscription(
+        self.segmentation_subscriber = self.create_subscription(
             UInt8MultiArray, 
-            '/pipeline/segmentation', 
-            self.pipeline_segmentation_callback, 
+            '/segmentation', 
+            self.segmentation_callback, 
             self.queue_size)
         
         #flush queues
@@ -60,8 +60,8 @@ class dqn_controller_eval(Node):
 
         self.checkpoint_experiment = 0
         self.checkpoint_episode = 180
-        self.checkpoint_path = 'src/aqua_rl/aqua_rl/checkpoints/dqn/{}/episode_{}.pt'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
-        self.save_path = 'src/aqua_rl/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
+        self.checkpoint_path = 'src/aqua_rl/checkpoints/dqn/{}/episode_{}.pt'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
+        self.save_path = 'src/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
         checkpoint = torch.load(self.checkpoint_path, map_location=self.dqn.device)
@@ -85,7 +85,7 @@ class dqn_controller_eval(Node):
         self.trajectory = []
 
         #target trajectory
-        self.target_trajectory = 'src/aqua_rl/aqua_rl/trajectories/targets/rope_center.npy'
+        self.target_trajectory = 'src/aqua_rl/trajectories/targets/rope_center.npy'
         with open(self.target_trajectory, 'rb') as f:
             self.rope_x = np.load(f) 
             self.rope_y = np.load(f)
@@ -158,7 +158,7 @@ class dqn_controller_eval(Node):
         b = z2 - m * x2
         return m, b
     
-    def pipeline_segmentation_callback(self, seg_map):
+    def segmentation_callback(self, seg_map):
         
         #flush image queue
         if self.flush_segmentation < self.flush_steps:

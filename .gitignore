@@ -1,14 +1,12 @@
 *.pyc
 *.pth
-station_keeping_dataset/
-pipeline_dataset/
 rope_dataset/
-pipeline_segmentation/simulation_pipeline_dataset/
-pipeline_segmentation/simulation_rope_dataset/
-pipeline_segmentation/simulation_rope_dataset_v2/
+segmentation_module/models/
+segmentation_module/pipeline_dataset/
+segmentation_module/rope_dataset/
+segmentation_module/rope_dataset_v2/
 aqua_rl/YOLOv7/weights/
-pipeline_segmentation/models/
-aqua_rl/checkpoints
-aqua_rl/evaluations
-aqua_rl/trajectories
+checkpoints/
+evaluations/
+trajectories/
 

@@ -6,7 +6,7 @@ from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from torchinfo import summary
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from datasets import PipelineDataset
+from datasets import SegmentationDataset
 import numpy as np
 from ignite.metrics import Precision, Recall, Accuracy
 from tqdm import tqdm
@@ -60,7 +60,7 @@ def eval(args=None):
     model.load_state_dict(checkpoint['model_state_dict'])
     summary(model)
 
-    dataset = PipelineDataset(root=root,
+    dataset = SegmentationDataset(root=root,
                               split='test', transforms=data_transforms['test'])
     sampler = SequentialSampler(dataset)
     loader = DataLoader(

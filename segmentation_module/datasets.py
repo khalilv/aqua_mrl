@@ -5,7 +5,7 @@ import glob
 import torch
 import cv2  
 
-class PipelineDataset(Dataset):
+class SegmentationDataset(Dataset):
     def __init__(self, root, split, transforms) -> None:
         self.root = os.path.join(root, split)
         self.transforms = transforms
