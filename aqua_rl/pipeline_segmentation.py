@@ -6,7 +6,7 @@ from rclpy.node import Node
 import numpy as np
 from torchvision import models
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
-from aqua_pipeline_inspection.DeepLabv3.deeplabv3 import DeepLabv3
+from aqua_rl.DeepLabv3.deeplabv3 import DeepLabv3
 import time
 from std_msgs.msg import UInt8MultiArray
 import os
@@ -24,11 +24,11 @@ class pipeline_segmentation(Node):
         self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/pipeline/segmentation', self.queue_size)
         self.seg_map = UInt8MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
-        self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3_ropev2/best.pt')
+        self.model = DeepLabv3('src/aqua_rl/pipeline_segmentation/models/deeplabv3_mobilenetv3_ropev2/best.pt')
         self.img_size = (32, 32)
         
         #online dataset collection
-        self.dataset_path = 'src/aqua_pipeline_inspection/rope_dataset/'
+        self.dataset_path = 'src/aqua_rl/rope_dataset/'
         self.dataset_size = len(os.listdir(self.dataset_path))
         self.save_probability = 0.0
 

@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from aqua_pipeline_inspection.RAFT.utils.utils import bilinear_sampler
+from aqua_rl.RAFT.utils.utils import bilinear_sampler
 
 class CorrBlock:
     def __init__(self, fmap1, fmap2, num_levels=4, radius=4):

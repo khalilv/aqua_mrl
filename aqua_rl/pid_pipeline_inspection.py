@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
 from ir_aquasim_interfaces.srv import EmptyWorkaround
-from aqua_pipeline_inspection.control.PID import AnglePID, PID
+from aqua_rl.control.PID import AnglePID, PID
 from std_msgs.msg import Float32MultiArray, Float32
 import numpy as np 
 import os
@@ -45,13 +45,13 @@ class pid_pipeline_inspection(Node):
         #trajectory recording
         self.record_trajectory = True
         self.trajectory = []
-        self.save_path = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pid/'
+        self.save_path = 'src/aqua_rl/aqua_rl/trajectories/pid/'
         self.num_trajectories = len(os.listdir(self.save_path))
         
         #target trajectory
         self.offset_x = 47.14558
         self.offset_z = -19.43558
-        self.target_trajectory = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/trajectories/pipeline_center.npy'
+        self.target_trajectory = 'src/aqua_rl/aqua_rl/trajectories/pipeline_center.npy'
         with open(self.target_trajectory, 'rb') as f:
             self.pipeline_x = np.load(f) + self.offset_x
             self.pipeline_z = np.load(f) + self.offset_z

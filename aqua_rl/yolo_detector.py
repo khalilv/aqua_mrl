@@ -1,7 +1,7 @@
 import rclpy
 import cv2
 import cv_bridge
-from aqua_pipeline_inspection.YOLOv7.yolov7 import YoloV7
+from aqua_rl.YOLOv7.yolov7 import YoloV7
 from sensor_msgs.msg import CompressedImage
 from rclpy.node import Node
 from argparse import Namespace
@@ -21,7 +21,7 @@ class yolo_detector(Node):
         self.model = YoloV7(Namespace(half=False,
                                         confidence_threshold=0.25, 
                                         iou_threshold = 0.45,
-                                        weights = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/YOLOv7/weights/treasure.pt',
+                                        weights = 'src/aqua_rl/aqua_rl/YOLOv7/weights/treasure.pt',
                                         image_size = image_size, 
                                         trace = True, 
                                         verbose = False))

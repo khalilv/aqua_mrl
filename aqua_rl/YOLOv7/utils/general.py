@@ -17,7 +17,7 @@ import pandas as pd
 import torch
 import torchvision
 
-from aqua_pipeline_inspection.YOLOv7.utils.torch_utils import init_torch_seeds
+from aqua_rl.YOLOv7.utils.torch_utils import init_torch_seeds
 
 # Settings
 torch.set_printoptions(linewidth=320, precision=5, profile='long')

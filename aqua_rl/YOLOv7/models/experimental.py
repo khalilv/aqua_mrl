@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import sys
-from aqua_pipeline_inspection.YOLOv7.models.common import Conv
+from aqua_rl.YOLOv7.models.common import Conv
 
 class CrossConv(nn.Module):
     # Cross Convolution Downsample
@@ -59,7 +59,7 @@ class Ensemble(nn.ModuleList):
 def attempt_load(weights, map_location=None):
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     model = Ensemble()
-    sys.path.insert(0, "./src/aqua_pipeline_inspection/aqua_pipeline_inspection/YOLOv7")
+    sys.path.insert(0, "./src/aqua_rl/aqua_rl/YOLOv7")
     for w in weights if isinstance(weights, list) else [weights]:
         ckpt = torch.load(w, map_location=map_location)  # load
         model.append(ckpt['ema' if ckpt.get('ema') else 'model'].float().fuse().eval())  # FP32 model

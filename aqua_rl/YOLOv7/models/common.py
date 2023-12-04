@@ -11,9 +11,9 @@ import torch.nn.functional as F
 from PIL import Image
 from torch.cuda import amp
 
-from aqua_pipeline_inspection.YOLOv7.utils.general import non_max_suppression, make_divisible, scale_coords, increment_path, xyxy2xywh, letterbox
-from aqua_pipeline_inspection.YOLOv7.utils.plots import color_list, plot_one_box
-from aqua_pipeline_inspection.YOLOv7.utils.torch_utils import time_synchronized
+from aqua_rl.YOLOv7.utils.general import non_max_suppression, make_divisible, scale_coords, increment_path, xyxy2xywh, letterbox
+from aqua_rl.YOLOv7.utils.plots import color_list, plot_one_box
+from aqua_rl.YOLOv7.utils.torch_utils import time_synchronized
 
 
 ##### basic ####

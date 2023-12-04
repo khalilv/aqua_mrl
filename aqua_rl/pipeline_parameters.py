@@ -6,7 +6,7 @@ from rclpy.node import Node
 import numpy as np
 from torchvision import models
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
-from aqua_pipeline_inspection.DeepLabv3.deeplabv3 import DeepLabv3
+from aqua_rl.DeepLabv3.deeplabv3 import DeepLabv3
 import time
 from std_msgs.msg import Float32MultiArray
 from filterpy.kalman import KalmanFilter
@@ -26,7 +26,7 @@ class pipeline_parameters(Node):
         self.command = Float32MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
         self.img_size = (300,400)
-        self.model = DeepLabv3('src/aqua_pipeline_inspection/pipeline_segmentation/models/deeplabv3_mobilenetv3/best.pt')
+        self.model = DeepLabv3('src/aqua_rl/pipeline_segmentation/models/deeplabv3_mobilenetv3/best.pt')
         self.current_error = 0
 
         #init kalman filter for tracking waypoint

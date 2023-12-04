@@ -1,10 +1,10 @@
 import torch
 import numpy as np
-from aqua_pipeline_inspection.YOLOv7.utils.general import check_img_size, non_max_suppression, \
+from aqua_rl.YOLOv7.utils.general import check_img_size, non_max_suppression, \
     scale_coords, set_logging, letterbox
-from aqua_pipeline_inspection.YOLOv7.utils.plots import plot_one_box
-from aqua_pipeline_inspection.YOLOv7.utils.torch_utils import time_synchronized, TracedModel
-from aqua_pipeline_inspection.YOLOv7.models.experimental import attempt_load
+from aqua_rl.YOLOv7.utils.plots import plot_one_box
+from aqua_rl.YOLOv7.utils.torch_utils import time_synchronized, TracedModel
+from aqua_rl.YOLOv7.models.experimental import attempt_load
 
 class YoloV7:
     def __init__(self, cfg):

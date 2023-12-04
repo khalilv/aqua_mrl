@@ -4,8 +4,8 @@ import cv2
 import cv_bridge
 import time
 import torch
-from aqua_pipeline_inspection.RAFT.raft import RAFT
-from aqua_pipeline_inspection.RAFT.utils.utils import InputPadder
+from aqua_rl.RAFT.raft import RAFT
+from aqua_rl.RAFT.utils.utils import InputPadder
 from sensor_msgs.msg import CompressedImage
 from rclpy.node import Node
 from argparse import Namespace
@@ -26,7 +26,7 @@ class downward_camera_subscriber(Node):
         self.last_img = None
         self.last_time =time.time()
         self.device = 'cuda'
-        self.checkpoint = 'src/aqua_pipeline_inspection/aqua_pipeline_inspection/RAFT/models/raft-small.pth'
+        self.checkpoint = 'src/aqua_rl/aqua_rl/RAFT/models/raft-small.pth'
         self.small = True
         self.mixed_precision = False
         self.model = torch.nn.DataParallel(RAFT(Namespace(small=self.small,

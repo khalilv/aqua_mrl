@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
-from aqua_pipeline_inspection.control.PID import AnglePID
+from aqua_rl.control.PID import AnglePID
 from sensor_msgs.msg import CompressedImage
 import os 
 from pynput import keyboard
@@ -22,7 +22,7 @@ class manual_controller(Node):
         self.pitch_pid = AnglePID(target = 0.0, gains = [0.5181, 0.0, 0.9])
         self.measured_roll_angle = 0.0
         self.measured_pitch_angle = 0.0
-        self.dataset_path = 'src/aqua_pipeline_inspection/rope_dataset/'
+        self.dataset_path = 'src/aqua_rl/rope_dataset/'
         self.dataset_size = len(os.listdir(self.dataset_path))
         self.command = Command()
         self.command.speed = 0.25 #fixed speed

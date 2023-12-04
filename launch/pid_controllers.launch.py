@@ -5,10 +5,10 @@ from launch_ros.actions import Node
 def generate_launch_description():
     ld = LaunchDescription()
 
-    config = 'src/aqua_pipeline_inspection/config/params.yaml'
+    config = 'src/aqua_rl/config/params.yaml'
 
     node=Node(
-        package = 'aqua_pipeline_inspection',
+        package = 'aqua_rl',
         name = 'pid_controllers',
         executable = 'pid_controllers',
         parameters = [config], 

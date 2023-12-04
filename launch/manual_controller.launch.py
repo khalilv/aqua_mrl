@@ -5,17 +5,17 @@ from launch_ros.actions import Node
 def generate_launch_description():
     ld = LaunchDescription()
 
-    # config = 'src/aqua_pipeline_inspection/config/params.yaml'
+    # config = 'src/aqua_rl/config/params.yaml'
 
     node1=Node(
-        package = 'aqua_pipeline_inspection',
+        package = 'aqua_rl',
         name = 'manual_controller',
         executable = 'manual_controller',
         output='screen',
         emulate_tty=True,
     )
     node2=Node(
-        package = 'aqua_pipeline_inspection',
+        package = 'aqua_rl',
         name = 'yolo_detector',
         executable = 'yolo_detector',
         output='screen',

@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from aqua_pipeline_inspection.control.PID import AnglePID, PID
+from aqua_rl.control.PID import AnglePID, PID
 from aqua2_interfaces.msg import AquaPose, Command
 from std_msgs.msg import Float32
 
