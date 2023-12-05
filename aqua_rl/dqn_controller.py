@@ -15,8 +15,17 @@ class dqn_controller(Node):
     def __init__(self):
         super().__init__('dqn_controller')
 
-        #subscribers and publishers
+        #hyperparams
         self.queue_size = 5
+        self.roll_gains = [0.25, 0.0, 0.75]
+        self.history_size = 10
+        self.pitch_limit = 0.005
+        self.yaw_limit = 0.25
+        self.yaw_action_space = 3
+        self.pitch_action_space = 3
+        self.num_episodes = 600
+
+        #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
         self.segmentation_subscriber = self.create_subscription(
@@ -35,29 +44,24 @@ class dqn_controller(Node):
         self.finished = False
         self.complete = False
 
-        self.roll_gains = [0.25, 0.0, 0.75]
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
         self.measured_roll_angle = 0.0
         
         #dqn controller for yaw and pitch 
-        self.yaw_action_space = 3
-        self.pitch_action_space = 3
-        self.history_size = 10
-        self.yaw_actions = np.linspace(-0.25, 0.25, self.yaw_action_space)
-        self.pitch_actions = np.linspace(-0.005, 0.005, self.pitch_action_space)
+        self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
+        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
-        self.num_episodes = 600
         self.state = None
         self.next_state = None
         self.action = None
         self.reward = None
         self.history_queue = []
         self.episode_rewards = []
-        self.episode_loss = []
 
         #trajectory recording
         self.trajectory = []
         self.save_every = 10
+        self.evaluate = False 
 
         #target for reward
         self.img_size = (32, 32)
@@ -67,7 +71,7 @@ class dqn_controller(Node):
         self.template = self.template.astype(np.uint8)
 
         self.root_path = 'src/aqua_rl/checkpoints/dqn/'
-        self.checkpoint_experiment = 0
+        self.checkpoint_experiment = 2
         try:
             self.save_path = os.path.join(self.root_path, str(self.checkpoint_experiment))
             self.traj_save_path = os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.checkpoint_experiment))
@@ -110,16 +114,15 @@ class dqn_controller(Node):
         self.max_error_line = (1.225, 18.55)
         self.depth_range = [-6, -14.5]
 
-
         #end of trajectory
         self.finish_line_x = 25
+        self.start_line_x = -70
 
         #reset command
         self.reset_client = self.create_client(EmptyWorkaround, '/simulator/reset_robot')
         self.reset_req = EmptyWorkaround.Request()
-
         print('Initialized: dqn controller')
-  
+
     def imu_callback(self, imu):
         
         #finished flag
@@ -136,8 +139,12 @@ class dqn_controller(Node):
         dist_to_line = (m*imu.x - imu.z + b) / np.sqrt(np.square(m) + 1)
         if imu.x > self.finish_line_x:
             self.flush_commands = 0
-            self.complete = True
             self.finished = True
+            self.complete = True
+        if imu.x < self.start_line_x:
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -194,8 +201,6 @@ class dqn_controller(Node):
         if len(self.history_queue) < self.history_size:
             self.history_queue.append(seg_map)
         else:
-            # t0 = time()
-
             self.history_queue.pop()
             self.history_queue.append(seg_map)
             s = np.array(self.history_queue)
@@ -204,27 +209,28 @@ class dqn_controller(Node):
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], device=self.dqn.device)
 
-            if self.state is not None and self.action is not None:
-                self.dqn.memory.push(self.state, self.action, self.next_state, self.reward)
+            if self.evaluate:
+                #select greedy action, dont optimize model or append to replay buffer
+                self.action = self.dqn.select_eval_action(self.next_state)
+            else:
+                if self.state is not None and self.action is not None:
+                    self.dqn.memory.push(self.state, self.action, self.next_state, self.reward)
 
-            self.action = self.dqn.select_action(self.next_state)       
-            self.state = self.next_state
+                self.action = self.dqn.select_action(self.next_state)       
+                self.state = self.next_state
 
-            # Perform one step of the optimization (on the policy network)
-            loss = self.dqn.optimize()
-            if loss is not None:
-                self.episode_loss.append(loss.detach().cpu().numpy())
-
-            # Soft update of the target network's weights
-            # θ′ ← τ θ + (1 −τ )θ′
-            target_net_state_dict = self.dqn.target_net.state_dict()
-            policy_net_state_dict = self.dqn.policy_net.state_dict()
-            for key in policy_net_state_dict:
-                target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
-            self.dqn.target_net.load_state_dict(target_net_state_dict)
+                # Perform one step of the optimization (on the policy network)
+                self.dqn.optimize()
+                
+                # Soft update of the target network's weights
+                # θ′ ← τ θ + (1 −τ )θ′
+                target_net_state_dict = self.dqn.target_net.state_dict()
+                policy_net_state_dict = self.dqn.policy_net.state_dict()
+                for key in policy_net_state_dict:
+                    target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
+                self.dqn.target_net.load_state_dict(target_net_state_dict)
             
             action_idx = self.action.detach().cpu().numpy()[0][0]
-            # print(action_idx, '->', (int(action_idx/3), action_idx % 3))
             self.command.pitch = self.pitch_actions[int(action_idx/3)]
             self.command.yaw = self.yaw_actions[action_idx % 3]
             
@@ -232,8 +238,7 @@ class dqn_controller(Node):
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
             self.command_publisher.publish(self.command)
 
-            # t1 = time()
-            # print('Processing time: ', (t1 - t0))
+
         return 
     
     def reward_calculation(self, seg_map):
@@ -255,14 +260,13 @@ class dqn_controller(Node):
             self.episode_rewards.append(reward)
 
         self.episode_rewards = np.array(self.episode_rewards)
-        self.episode_loss = np.array(self.episode_loss)
         print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
-        print('Episode loss. Average: ', np.mean(self.episode_loss), ' Sum: ', np.sum(self.episode_loss))
 
         if self.state is not None:
             self.dqn.memory.push(self.state, self.action, None, torch.tensor([reward], device=self.dqn.device))
         
         if self.episode % self.save_every == 0:
+            print('Saving checkpoint')
             torch.save({
                 'training_steps': self.dqn.steps_done,
                 'model_state_dict_policy': self.dqn.policy_net.state_dict(),
@@ -271,11 +275,9 @@ class dqn_controller(Node):
                 'memory': self.dqn.memory.memory
             }, self.save_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)))
         
-        print('Saving trajectory')
         with open(self.traj_save_path + '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
             np.save(f, self.episode_rewards)
             np.save(f, np.array(self.trajectory))
-            np.save(f, self.episode_loss)
         if self.episode < self.num_episodes:
             self.reset()
         else:
@@ -294,9 +296,12 @@ class dqn_controller(Node):
 
         #increment episode and reset rewards
         self.episode_rewards = []
-        self.episode_loss = []
         self.episode += 1
-        
+        self.evaluate = self.episode % self.save_every == 0
+
+        if self.evaluate:
+            print('Starting evaluation')
+
         #reset trajectory
         self.trajectory = []
         
@@ -314,8 +319,6 @@ class dqn_controller(Node):
         self.finished = False
         self.complete = False
         
-        print('-------------- Finished reset --------------')
-
         return
     
 def main(args=None):

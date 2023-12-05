@@ -15,8 +15,17 @@ class dqn_controller_eval(Node):
     def __init__(self):
         super().__init__('dqn_controller_eval')
 
-        #subscribers and publishers
+        #hyperparams
         self.queue_size = 5
+        self.roll_gains = [0.25, 0.0, 0.75]
+        self.history_size = 10
+        self.pitch_limit = 0.005
+        self.yaw_limit = 0.25
+        self.yaw_action_space = 3
+        self.pitch_action_space = 3
+        self.num_eval_episodes = 10
+
+        #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
         self.segmentation_subscriber = self.create_subscription(
@@ -35,18 +44,13 @@ class dqn_controller_eval(Node):
         self.finished = False
         self.complete = False
 
-        self.roll_gains = [0.25, 0.0, 0.75]
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
         self.measured_roll_angle = 0.0
         
         #dqn controller for yaw and pitch 
-        self.yaw_action_space = 3
-        self.pitch_action_space = 3
-        self.history_size = 10
-        self.yaw_actions = np.linspace(-0.25, 0.25, self.yaw_action_space)
-        self.pitch_actions = np.linspace(-0.005, 0.005, self.pitch_action_space)
+        self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
+        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
-        self.num_eval_episodes = 10
         self.reward = None
         self.history_queue = []
         self.episode_rewards = []
@@ -58,10 +62,10 @@ class dqn_controller_eval(Node):
         self.template[:,half-2:half+2] = 1
         self.template = self.template.astype(np.uint8)
 
-        self.checkpoint_experiment = 0
-        self.checkpoint_episode = 180
+        self.checkpoint_experiment = 1
+        self.checkpoint_episode = 390
         self.checkpoint_path = 'src/aqua_rl/checkpoints/dqn/{}/episode_{}.pt'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
-        self.save_path = 'src/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
+        self.save_path = 'src/aqua_rl/evaluations/dqn/{}_episode_{}/'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
         checkpoint = torch.load(self.checkpoint_path, map_location=self.dqn.device)

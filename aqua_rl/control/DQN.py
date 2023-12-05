@@ -58,10 +58,10 @@ class DQN:
         self.GAMMA = 0.99
         self.EPS_START = 0.9
         self.EPS_END = 0.1
-        self.EPS_DECAY = 100000
+        self.EPS_DECAY = 250000
         self.TAU = 0.002
         LR = 1e-4
-        self.MEMORY_SIZE = 60000
+        self.MEMORY_SIZE = 100000
         self.n_actions = n_actions
         self.history_size = history_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -98,13 +98,15 @@ class DQN:
                                         batch.next_state)), device=self.device, dtype=torch.bool)
         non_final_next_states = torch.cat([s for s in batch.next_state
                                                     if s is not None])
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
+        
+        state_batch = torch.cat(batch.state) #S
+        action_batch = torch.cat(batch.action) #A
+        reward_batch = torch.cat(batch.reward) #R
+
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
-        state_action_values = self.policy_net(state_batch).gather(1, action_batch)
+        state_action_values = self.policy_net(state_batch).gather(1, action_batch) #Qp(S_t,A)
 
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based
@@ -113,13 +115,18 @@ class DQN:
         # state value or 0 in case the state was final.
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
         with torch.no_grad():
-            next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0]
+            #DQN
+            next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0] #max_a Qt(S_t+1, a)
+
+            #DDQN
+            # self.target_net(non_final_next_states).gather(1, self.policy_net(non_final_next_states).argmax(1).reshape(-1,1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+        
         # Compute the expected Q values
-        expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch
+        expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch  #R + gamma * target
 
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
-        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1)) 
         
         # Optimize the model
         self.optimizer.zero_grad()
