@@ -87,7 +87,8 @@ class DQN:
             return torch.tensor([[int(np.random.randint(0,self.n_actions))]], device=self.device, dtype=torch.long)
     
     def select_eval_action(self, state):
-        return self.target_net(state).max(1)[1].view(1, 1)
+        with torch.no_grad():
+            return self.target_net(state).max(1)[1].view(1, 1)
 
     def optimize(self):
         if len(self.memory) < self.BATCH_SIZE:

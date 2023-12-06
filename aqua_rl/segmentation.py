@@ -6,7 +6,7 @@ from rclpy.node import Node
 import numpy as np
 from aqua_rl.DeepLabv3.deeplabv3 import DeepLabv3
 import time
-from std_msgs.msg import UInt8MultiArray
+from std_msgs.msg import UInt8MultiArray, Float32
 import os
 
 class segmentation(Node):
@@ -20,6 +20,8 @@ class segmentation(Node):
             self.camera_callback,
             self.queue_size)
         self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/segmentation', self.queue_size)
+        self.reward_publisher = self.create_publisher(Float32, '/a13/reward', self.queue_size)
+
         self.seg_map = UInt8MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
         self.model = DeepLabv3('src/aqua_rl/segmentation_module/models/deeplabv3_mobilenetv3_ropev2/best.pt')
@@ -30,11 +32,13 @@ class segmentation(Node):
         self.dataset_size = len(os.listdir(self.dataset_path))
         self.save_probability = 0.0
 
+        #measuring publish frequency
+        self.t0 = 0
+
         cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
         print('Initialized: segmentation module')
 
     def camera_callback(self, msg):
-        t0 = time.time()
 
         img = np.fromstring(msg.data.tobytes(), np.uint8)
         img = cv2.imdecode(img, cv2.IMREAD_COLOR)
@@ -49,6 +53,8 @@ class segmentation(Node):
         pred = pred.astype(np.uint8)
         pred = cv2.resize(pred, self.img_size)
 
+        # self.publish_reward(pred)
+
         #publish state
         self.seg_map.data = pred.flatten().tolist()
         self.segmentation_publisher.publish(self.seg_map)
@@ -57,9 +63,27 @@ class segmentation(Node):
         cv2.waitKey(1)
         
         t1 = time.time()
-        print('Processing time: ', (t1 - t0))
+        print('Publishing Frequency: ', (t1 - self.t0))
+        self.t0 = t1
         return
+    
+    def publish_reward(self, seg_map):
+        #target for reward
+        template = np.zeros(self.img_size)
+        half = int(self.img_size[0]/2)
+        template[:,half-2:half+2] = 1
+        template = self.template.astype(np.uint8)
 
+        # Calculate intersection and union
+        intersection = np.logical_and(seg_map, template)
+        union = np.logical_or(seg_map, template)
+        iou = np.sum(intersection) / np.sum(union)
+        
+        reward = Float32()
+        reward.data = iou - 0.025
+        self.reward_publisher.publish(reward)
+        return
+        
 def main(args=None):
     rclpy.init(args=args)
     subscriber = segmentation()
