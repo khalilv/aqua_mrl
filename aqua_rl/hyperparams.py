@@ -1,0 +1,15 @@
+queue_size_ = 5
+roll_gains_ = [0.25, 0.0, 0.75]
+history_size_ = 20
+speed_ = 0.25
+pitch_limit_ = 0.005
+yaw_limit_ = 0.25
+yaw_action_space_ = 3
+pitch_action_space_ = 3
+img_size_ = (32,32)
+empty_state_max_ = 10
+checkpoint_experiment_ = 0
+depth_range_ = [-6, -14.5]
+template_width_ = 4
+goal_reached_reward_ = 10
+goal_not_reached_reward_ = -10

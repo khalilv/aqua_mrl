@@ -1,28 +1,40 @@
 import rclpy
-from rclpy.node import Node
-from aqua2_interfaces.msg import Command, AquaPose
-from ir_aquasim_interfaces.srv import EmptyWorkaround
-from aqua_rl.control.PID import AnglePID
-from aqua_rl.control.DQN import DQN
-from std_msgs.msg import UInt8MultiArray
+import torch
 import numpy as np 
 import os
+from rclpy.node import Node
+from aqua2_interfaces.msg import Command, AquaPose
+from ir_aquasim_interfaces.srv import SetPosition
+from geometry_msgs.msg import Pose
+from std_msgs.msg import UInt8MultiArray
 from time import sleep
-import torch
-
+from aqua_rl.control.PID import AnglePID
+from aqua_rl.control.DQN import DQN
+from aqua_rl.helpers import define_template, reward_calculation
+from aqua_rl import hyperparams
 
 class dqn_controller_eval(Node):
     def __init__(self):
         super().__init__('dqn_controller_eval')
 
         #hyperparams
-        self.queue_size = 5
-        self.roll_gains = [0.25, 0.0, 0.75]
-        self.history_size = 10
-        self.pitch_limit = 0.005
-        self.yaw_limit = 0.25
-        self.yaw_action_space = 3
-        self.pitch_action_space = 3
+        self.queue_size = hyperparams.queue_size_
+        self.roll_gains = hyperparams.roll_gains_
+        self.history_size = hyperparams.history_size_
+        self.pitch_limit = hyperparams.pitch_limit_
+        self.yaw_limit = hyperparams.yaw_limit_
+        self.yaw_action_space = hyperparams.yaw_action_space_
+        self.pitch_action_space = hyperparams.pitch_action_space_
+        self.img_size = hyperparams.img_size_
+        self.empty_state_max = hyperparams.empty_state_max_
+        self.checkpoint_experiment = hyperparams.checkpoint_experiment_
+        self.depth_range = hyperparams.depth_range_
+        self.template_width = hyperparams.template_width_
+
+        
+        self.checkpoint_episode = 210
+
+        #number of eval episodes 
         self.num_eval_episodes = 10
 
         #subscribers and publishers
@@ -51,19 +63,15 @@ class dqn_controller_eval(Node):
         self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
         self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
-        self.reward = None
         self.history_queue = []
         self.episode_rewards = []
 
         #target for reward
-        self.img_size = (32, 32)
-        self.template = np.zeros(self.img_size)
-        half = int(self.img_size[0]/2)
-        self.template[:,half-2:half+2] = 1
-        self.template = self.template.astype(np.uint8)
+        self.template = define_template(self.img_size, self.template_width)
 
-        self.checkpoint_experiment = 1
-        self.checkpoint_episode = 390
+        #stopping condition for empty vision input
+        self.empty_state_counter = 0
+
         self.checkpoint_path = 'src/aqua_rl/checkpoints/dqn/{}/episode_{}.pt'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
         self.save_path = 'src/aqua_rl/evaluations/dqn/{}_episode_{}/'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
         if not os.path.exists(self.save_path):
@@ -88,24 +96,13 @@ class dqn_controller_eval(Node):
         #trajectory recording
         self.trajectory = []
 
-        #target trajectory
-        self.target_trajectory = 'src/aqua_rl/trajectories/targets/rope_center.npy'
-        with open(self.target_trajectory, 'rb') as f:
-            self.rope_x = np.load(f) 
-            self.rope_y = np.load(f)
-            self.rope_z = np.load(f)
-        
-        #define max error to target trajectory
-        self.max_error_line = (1.225, 18.55)
-        self.depth_range = [-6, -14.5]
-
         #end of trajectory
         self.finish_line_x = 25
+        self.start_line_x = -70
 
         #reset command
-        self.reset_client = self.create_client(EmptyWorkaround, '/simulator/reset_robot')
-        self.reset_req = EmptyWorkaround.Request()
-
+        self.reset_client = self.create_client(SetPosition, '/simulator/set_position')
+        self.reset_req = SetPosition.Request()
         print('Initialized: dqn controller eval')
   
     def imu_callback(self, imu):
@@ -120,12 +117,16 @@ class dqn_controller_eval(Node):
             return
         
         self.measured_roll_angle = self.calculate_roll(imu)
-        m, b = self.get_target_line(imu.x)
-        dist_to_line = (m*imu.x - imu.z + b) / np.sqrt(np.square(m) + 1)
+        
         if imu.x > self.finish_line_x:
             self.flush_commands = 0
-            self.complete = True
             self.finished = True
+            self.complete = True
+        if imu.x < self.start_line_x:
+            print('Drifted behind starting position')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -136,31 +137,12 @@ class dqn_controller_eval(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = False
-        elif np.abs(dist_to_line) > self.get_max_error_from_depth(imu.y):
-            print('Drifted far from target z trajectory')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
     
     def calculate_roll(self, imu):
         return imu.roll
-    
-    def get_max_error_from_depth(self, depth):
-        return self.max_error_line[0]*depth + self.max_error_line[1]
-       
-       
-    def get_target_line(self, x):
-        ind = np.argwhere(self.rope_x >= x)[0][0]
-        x1 = self.rope_x[ind - 1]
-        z1 = self.rope_z[ind - 1]
-        x2 = self.rope_x[ind]
-        z2 = self.rope_z[ind]
-        m = (z2 - z1) / (x2 - x1)
-        b = z2 - m * x2
-        return m, b
     
     def segmentation_callback(self, seg_map):
         
@@ -183,40 +165,46 @@ class dqn_controller_eval(Node):
         if len(self.history_queue) < self.history_size:
             self.history_queue.append(seg_map)
         else:
-            self.history_queue.pop()
+            self.history_queue.pop(0)
             self.history_queue.append(seg_map)
             s = np.array(self.history_queue)
+            
+            #check for empty input from vision module
+            if s.sum() == 0:
+                self.empty_state_counter += 1
+            else:
+                self.empty_state_counter = 0
+            
+            #if nothing has been detected in empty_state_max frames then reset
+            if self.empty_state_counter >= self.empty_state_max:
+                print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
+                self.flush_commands = 0
+                self.finished = True
+                self.complete = False
+                return
+            
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = self.reward_calculation(seg_map)
+            reward = reward_calculation(seg_map, self.template)
             self.episode_rewards.append(reward)
             action = self.dqn.select_eval_action(state)
 
             action_idx = action.detach().cpu().numpy()[0][0]
-            # print(action_idx, '->', (int(action_idx/3), action_idx % 3))
             self.command.pitch = self.pitch_actions[int(action_idx/3)]
             self.command.yaw = self.yaw_actions[action_idx % 3]
             
-            self.command.speed = 0.25 #fixed speed
+            self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
             self.command_publisher.publish(self.command)
         return 
-    
-    def reward_calculation(self, seg_map):
-        # Calculate intersection and union
-        intersection = np.logical_and(seg_map, self.template)
-        union = np.logical_or(seg_map, self.template)
-        iou = np.sum(intersection) / np.sum(union)
-        return iou - 0.025
-        
 
     def finish(self):
         if self.complete:
             print('Goal reached')
-            reward = 10
+            reward = hyperparams.goal_reached_reward_
             self.episode_rewards.append(reward)
         else:
             print('Goal not reached')
-            reward = -10
+            reward = hyperparams.goal_not_reached_reward_
             self.episode_rewards.append(reward)
 
         self.episode_rewards = np.array(self.episode_rewards)
@@ -236,6 +224,19 @@ class dqn_controller_eval(Node):
     def reset(self):
         print('-------------- Resetting simulation --------------')
 
+        starting_pose = Pose()
+
+        #starting position
+        starting_pose.position.x = 70.0
+        starting_pose.position.z = -0.3
+        starting_pose.position.y = -12.0
+
+        #starting orientation
+        starting_pose.orientation.x = 0.0
+        starting_pose.orientation.y = -0.7071068
+        starting_pose.orientation.z = 0.0
+        starting_pose.orientation.w = 0.7071068
+        self.reset_req.pose = starting_pose
         self.reset_client.call_async(self.reset_req)
         sleep(0.5)
 
@@ -262,8 +263,6 @@ class dqn_controller_eval(Node):
         self.finished = False
         self.complete = False
         
-        print('-------------- Finished reset --------------')
-
         return
     
 def main(args=None):

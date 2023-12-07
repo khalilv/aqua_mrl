@@ -1,29 +1,37 @@
 import rclpy
+import torch
+import numpy as np 
+import os
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
+from std_msgs.msg import UInt8MultiArray
+from time import sleep
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN
-from std_msgs.msg import UInt8MultiArray
-import numpy as np 
-import os
-from time import sleep
-import torch
-
+from aqua_rl.helpers import define_template, reward_calculation
+from aqua_rl import hyperparams
 
 class dqn_controller(Node):
     def __init__(self):
         super().__init__('dqn_controller')
 
         #hyperparams
-        self.queue_size = 5
-        self.roll_gains = [0.25, 0.0, 0.75]
-        self.history_size = 20
-        self.pitch_limit = 0.005
-        self.yaw_limit = 0.25
-        self.yaw_action_space = 3
-        self.pitch_action_space = 3
+        self.queue_size = hyperparams.queue_size_
+        self.roll_gains = hyperparams.roll_gains_
+        self.history_size = hyperparams.history_size_
+        self.pitch_limit = hyperparams.pitch_limit_
+        self.yaw_limit = hyperparams.yaw_limit_
+        self.yaw_action_space = hyperparams.yaw_action_space_
+        self.pitch_action_space = hyperparams.pitch_action_space_
+        self.img_size = hyperparams.img_size_
+        self.empty_state_max = hyperparams.empty_state_max_
+        self.checkpoint_experiment = hyperparams.checkpoint_experiment_
+        self.depth_range = hyperparams.depth_range_
+        self.template_width = hyperparams.template_width_
+
+        #number of training episodes 
         self.num_episodes = 600
 
         #subscribers and publishers
@@ -65,18 +73,12 @@ class dqn_controller(Node):
         self.evaluate = False 
 
         #target for reward
-        self.img_size = (32, 32)
-        self.template = np.zeros(self.img_size)
-        half = int(self.img_size[0]/2)
-        self.template[:,half-2:half+2] = 1
-        self.template = self.template.astype(np.uint8)
-
+        self.template = define_template(self.img_size, self.template_width)
+        
         #stopping condition for empty vision input
         self.empty_state_counter = 0
-        self.empty_state_max = 10
 
         self.root_path = 'src/aqua_rl/checkpoints/dqn/'
-        self.checkpoint_experiment = 0
         try:
             self.save_path = os.path.join(self.root_path, str(self.checkpoint_experiment))
             self.traj_save_path = os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.checkpoint_experiment))
@@ -89,7 +91,7 @@ class dqn_controller(Node):
             self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.dqn.memory.memory = checkpoint['memory']
             self.dqn.steps_done = checkpoint['training_steps']
-            self.episode = eps + 1
+            self.episode = last_checkpoint_ep + 1
             print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.dqn.steps_done)
         except:
             print('No checkpoint found. Starting from episode 0')
@@ -107,18 +109,6 @@ class dqn_controller(Node):
         self.command.pitch = 0.0
         self.command.yaw = 0.0
         self.command.heave = 0.0
-               
-        #target trajectory
-        self.target_trajectory = 'src/aqua_rl/trajectories/targets/rope_center.npy'
-        with open(self.target_trajectory, 'rb') as f:
-            self.rope_x = np.load(f) 
-            self.rope_y = np.load(f)
-            self.rope_z = np.load(f)
-        
-        #define max error to target trajectory
-        self.max_error_line = (1.225, 18.55)
-        self.depth_range = [-6, -14.5]
-        self.safety_buffer_on_restart = 2
 
         #end of trajectory
         self.finish_line_x = 25
@@ -141,8 +131,7 @@ class dqn_controller(Node):
             return
         
         self.measured_roll_angle = self.calculate_roll(imu)
-        m, b = self.get_target_line(imu.x)
-        dist_to_line = (m*imu.x - imu.z + b) / np.sqrt(np.square(m) + 1)
+    
         if imu.x > self.finish_line_x:
             self.flush_commands = 0
             self.finished = True
@@ -162,31 +151,13 @@ class dqn_controller(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = False
-        # elif np.abs(dist_to_line) > self.get_max_error_from_depth(imu.y):
-        #     print('Drifted far from target z trajectory')
-        #     self.flush_commands = 0
-        #     self.finished = True
-        #     self.complete = False
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
     
     def calculate_roll(self, imu):
         return imu.roll
-    
-    def get_max_error_from_depth(self, depth):
-        return self.max_error_line[0]*depth + self.max_error_line[1]
-       
-    def get_target_line(self, x):
-        ind = np.argwhere(self.rope_x >= x)[0][0]
-        x1 = self.rope_x[ind - 1]
-        z1 = self.rope_z[ind - 1]
-        x2 = self.rope_x[ind]
-        z2 = self.rope_z[ind]
-        m = (z2 - z1) / (x2 - x1)
-        b = z2 - m * x2
-        return m, b
-    
+          
     def segmentation_callback(self, seg_map):
 
         #flush image queue
@@ -227,7 +198,7 @@ class dqn_controller(Node):
                 return
             
             self.next_state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = self.reward_calculation(seg_map)
+            reward = reward_calculation(seg_map, self.template)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], device=self.dqn.device)
 
@@ -256,29 +227,19 @@ class dqn_controller(Node):
             self.command.pitch = self.pitch_actions[int(action_idx/3)]
             self.command.yaw = self.yaw_actions[action_idx % 3]
             
-            self.command.speed = 0.25 #fixed speed
+            self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
             self.command_publisher.publish(self.command)
-
-
         return 
-    
-    def reward_calculation(self, seg_map):
-        # Calculate intersection and union
-        intersection = np.logical_and(seg_map, self.template)
-        union = np.logical_or(seg_map, self.template)
-        iou = np.sum(intersection) / np.sum(union)
-        return iou - 0.025
         
-
     def finish(self):
         if self.complete:
             print('Goal reached')
-            reward = 10
+            reward = hyperparams.goal_reached_reward_
             self.episode_rewards.append(reward)
         else:
             print('Goal not reached')
-            reward = -10
+            reward = hyperparams.goal_not_reached_reward_
             self.episode_rewards.append(reward)
 
         self.episode_rewards = np.array(self.episode_rewards)
@@ -313,10 +274,9 @@ class dqn_controller(Node):
 
         #starting position
         starting_pose.position.x = 70.0
-        starting_pose.position.z = -0.3
-        # starting_pose.position.y = np.random.uniform(self.depth_range[1]+self.safety_buffer_on_restart, 
-        #                                              self.depth_range[0]-self.safety_buffer_on_restart)
+        starting_pose.position.z = -0.3                                             
         starting_pose.position.y = -12.0
+        
         #starting orientation
         starting_pose.orientation.x = 0.0
         starting_pose.orientation.y = -0.7071068
