@@ -38,7 +38,7 @@ class DQNNetwork(nn.Module):
             nn.ReLU(),
         )
         self.fc = nn.Sequential(
-            nn.Linear(in_features= 3*3*64 + history, out_features=256),
+            nn.Linear(in_features= 3*3*64 + history*2, out_features=256),
             nn.ReLU(),
             nn.Linear(in_features=256, out_features=n_actions),
         )

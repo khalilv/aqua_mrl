@@ -186,12 +186,12 @@ class dqn_controller(Node):
         seg_map = np.array(seg_map.data).reshape(self.img_size)
         if len(self.history_queue) < self.history_size:
             self.history_queue.append(seg_map)
-            self.action_history_queue.append(4)
+            self.action_history_queue.append([0.0,0.0])
         else:
             self.history_queue.pop(0)
             self.history_queue.append(seg_map)
             ns = np.array(self.history_queue)
-            nsa = np.array(self.action_history_queue)
+            nsa = np.array(self.action_history_queue).flatten()
 
             #check for empty input from vision module
             if ns.sum() == 0:
@@ -236,11 +236,10 @@ class dqn_controller(Node):
                 self.dqn.target_net.load_state_dict(target_net_state_dict)
             
             action_idx = self.action.detach().cpu().numpy()[0][0]
+            self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
+            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]
             self.action_history_queue.pop(0)
-            self.action_history_queue.append(action_idx)
-            
-            self.command.pitch = self.pitch_actions[int(action_idx/3)]
-            self.command.yaw = self.yaw_actions[action_idx % 3]
+            self.action_history_queue.append([self.command.pitch, self.command.yaw])
             
             self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
