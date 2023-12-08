@@ -62,9 +62,12 @@ class dqn_controller(Node):
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
         self.state = None
         self.next_state = None
+        self.state_actions = None
+        self.next_state_actions = None
         self.action = None
         self.reward = None
         self.history_queue = []
+        self.action_history_queue = []
         self.episode_rewards = []
 
         #trajectory recording
@@ -92,6 +95,7 @@ class dqn_controller(Node):
             self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             memory = torch.load(self.save_memory_path + '/memory.pt', map_location=self.dqn.device)
             self.dqn.memory.memory = memory['memory']
+            print('ERM size: ', self.dqn.memory.__len__())
             self.dqn.steps_done = checkpoint['training_steps']
             self.episode = last_checkpoint_ep + 1
             print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.dqn.steps_done)
@@ -182,13 +186,15 @@ class dqn_controller(Node):
         seg_map = np.array(seg_map.data).reshape(self.img_size)
         if len(self.history_queue) < self.history_size:
             self.history_queue.append(seg_map)
+            self.action_history_queue.append(4)
         else:
             self.history_queue.pop(0)
             self.history_queue.append(seg_map)
-            s = np.array(self.history_queue)
-            
+            ns = np.array(self.history_queue)
+            nsa = np.array(self.action_history_queue)
+
             #check for empty input from vision module
-            if s.sum() == 0:
+            if ns.sum() == 0:
                 self.empty_state_counter += 1
             else:
                 self.empty_state_counter = 0
@@ -201,20 +207,22 @@ class dqn_controller(Node):
                 self.complete = False
                 return
             
-            self.next_state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             reward = reward_calculation(seg_map, self.template)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], device=self.dqn.device)
 
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.action = self.dqn.select_eval_action(self.next_state)
+                self.action = self.dqn.select_eval_action(self.next_state, self.next_state_actions)
             else:
-                if self.state is not None and self.action is not None:
-                    self.dqn.memory.push(self.state, self.action, self.next_state, self.reward)
+                if self.state is not None and self.action is not None and self.state_actions is not None:
+                    self.dqn.memory.push(self.state, self.state_actions, self.action, self.next_state, self.next_state_actions, self.reward)
 
-                self.action = self.dqn.select_action(self.next_state)       
+                self.action = self.dqn.select_action(self.next_state, self.next_state_actions)       
                 self.state = self.next_state
+                self.state_actions = self.next_state_actions
 
                 # Perform one step of the optimization (on the policy network)
                 self.dqn.optimize()
@@ -228,6 +236,9 @@ class dqn_controller(Node):
                 self.dqn.target_net.load_state_dict(target_net_state_dict)
             
             action_idx = self.action.detach().cpu().numpy()[0][0]
+            self.action_history_queue.pop(0)
+            self.action_history_queue.append(action_idx)
+            
             self.command.pitch = self.pitch_actions[int(action_idx/3)]
             self.command.yaw = self.yaw_actions[action_idx % 3]
             
@@ -249,8 +260,8 @@ class dqn_controller(Node):
         self.episode_rewards = np.array(self.episode_rewards)
         print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
 
-        if self.state is not None:
-            self.dqn.memory.push(self.state, self.action, None, torch.tensor([reward], device=self.dqn.device))
+        if self.state is not None and self.state_actions is not None and not self.evaluate:
+            self.dqn.memory.push(self.state, self.state_actions, self.action, None, None, torch.tensor([reward], device=self.dqn.device))
         
         if self.episode % self.save_every == 0:
             print('Saving checkpoint')
@@ -309,8 +320,10 @@ class dqn_controller(Node):
         
         #reset state and history queue
         self.state = None
+        self.state_actions = None
         self.action = None
         self.history_queue = []
+        self.action_history_queue = []
 
         #reset flush queues 
         self.flush_commands = self.flush_steps
