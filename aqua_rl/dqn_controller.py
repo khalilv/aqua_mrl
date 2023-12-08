@@ -81,6 +81,7 @@ class dqn_controller(Node):
         self.root_path = 'src/aqua_rl/checkpoints/dqn/'
         try:
             self.save_path = os.path.join(self.root_path, str(self.checkpoint_experiment))
+            self.save_memory_path = os.path.join(self.save_path, 'erm')
             self.traj_save_path = os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.checkpoint_experiment))
             eps = len(os.listdir(self.traj_save_path)) - 1
             last_checkpoint_ep = (eps // self.save_every) * self.save_every
@@ -89,7 +90,8 @@ class dqn_controller(Node):
             self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
             self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
             self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            self.dqn.memory.memory = checkpoint['memory']
+            memory = torch.load(self.save_memory_path + '/memory.pt', map_location=self.dqn.device)
+            self.dqn.memory.memory = memory['memory']
             self.dqn.steps_done = checkpoint['training_steps']
             self.episode = last_checkpoint_ep + 1
             print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.dqn.steps_done)
@@ -100,6 +102,8 @@ class dqn_controller(Node):
             os.mkdir(os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.new_checkpoint_experiment)))
             self.traj_save_path = os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.new_checkpoint_experiment))
             self.save_path = os.path.join(self.root_path, str(self.new_checkpoint_experiment))
+            os.mkdir(os.path.join(self.save_path, 'erm'))
+            self.save_memory_path = os.path.join(self.save_path, 'erm')
             self.episode = 0
 
         #initialize command
@@ -111,7 +115,7 @@ class dqn_controller(Node):
         self.command.heave = 0.0
 
         #end of trajectory
-        self.finish_line_x = 25
+        self.finish_line_x = 70
         self.start_line_x = -70
 
         #reset command
@@ -255,8 +259,10 @@ class dqn_controller(Node):
                 'model_state_dict_policy': self.dqn.policy_net.state_dict(),
                 'model_state_dict_target': self.dqn.target_net.state_dict(),
                 'optimizer_state_dict': self.dqn.optimizer.state_dict(),
-                'memory': self.dqn.memory.memory
             }, self.save_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)))
+            torch.save({
+                'memory': self.dqn.memory.memory
+            }, self.save_memory_path +  '/memory.pt')
         
         with open(self.traj_save_path + '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
             np.save(f, self.episode_rewards)

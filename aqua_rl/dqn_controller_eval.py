@@ -31,8 +31,7 @@ class dqn_controller_eval(Node):
         self.depth_range = hyperparams.depth_range_
         self.template_width = hyperparams.template_width_
 
-        
-        self.checkpoint_episode = 210
+        self.checkpoint_episode = 480
 
         #number of eval episodes 
         self.num_eval_episodes = 10
@@ -80,7 +79,6 @@ class dqn_controller_eval(Node):
         self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
         self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
         self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.dqn.memory.memory = checkpoint['memory']
         self.dqn.steps_done = checkpoint['training_steps']
         self.eval_episode = 0
         print('Weights loaded from episode: ', self.checkpoint_episode, ', training steps completed: ', self.dqn.steps_done)
