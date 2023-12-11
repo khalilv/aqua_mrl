@@ -30,8 +30,11 @@ class dqn_controller_eval(Node):
         self.checkpoint_experiment = hyperparams.checkpoint_experiment_
         self.depth_range = hyperparams.depth_range_
         self.template_width = hyperparams.template_width_
+        self.finish_line_x = hyperparams.finish_line_
+        self.start_line_x = hyperparams.starting_line_
 
-        self.checkpoint_episode = 480
+        #episode to load weights from
+        self.checkpoint_episode = 330
 
         #number of eval episodes 
         self.num_eval_episodes = 10
@@ -63,6 +66,7 @@ class dqn_controller_eval(Node):
         self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
         self.history_queue = []
+        self.action_history_queue = []
         self.episode_rewards = []
 
         #target for reward
@@ -93,10 +97,6 @@ class dqn_controller_eval(Node):
                
         #trajectory recording
         self.trajectory = []
-
-        #end of trajectory
-        self.finish_line_x = 25
-        self.start_line_x = -70
 
         #reset command
         self.reset_client = self.create_client(SetPosition, '/simulator/set_position')
@@ -162,10 +162,12 @@ class dqn_controller_eval(Node):
         seg_map = np.array(seg_map.data).reshape(self.img_size)
         if len(self.history_queue) < self.history_size:
             self.history_queue.append(seg_map)
+            self.action_history_queue.append([0.0,0.0])
         else:
             self.history_queue.pop(0)
             self.history_queue.append(seg_map)
             s = np.array(self.history_queue)
+            sa = np.array(self.action_history_queue).flatten()
             
             #check for empty input from vision module
             if s.sum() == 0:
@@ -182,13 +184,17 @@ class dqn_controller_eval(Node):
                 return
             
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            state_actions = torch.tensor(sa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+
             reward = reward_calculation(seg_map, self.template)
             self.episode_rewards.append(reward)
-            action = self.dqn.select_eval_action(state)
+            action = self.dqn.select_eval_action(state, state_actions)
 
             action_idx = action.detach().cpu().numpy()[0][0]
-            self.command.pitch = self.pitch_actions[int(action_idx/3)]
-            self.command.yaw = self.yaw_actions[action_idx % 3]
+            self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
+            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]
+            self.action_history_queue.pop(0)
+            self.action_history_queue.append([self.command.pitch, self.command.yaw])
             
             self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
@@ -201,7 +207,6 @@ class dqn_controller_eval(Node):
             reward = hyperparams.goal_reached_reward_
             self.episode_rewards.append(reward)
         else:
-            print('Goal not reached')
             reward = hyperparams.goal_not_reached_reward_
             self.episode_rewards.append(reward)
 
@@ -251,6 +256,7 @@ class dqn_controller_eval(Node):
         
         #reset history queue
         self.history_queue = []
+        self.action_history_queue = []
 
         #reset flush queues 
         self.flush_commands = self.flush_steps

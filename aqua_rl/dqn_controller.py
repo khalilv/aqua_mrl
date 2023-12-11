@@ -30,6 +30,8 @@ class dqn_controller(Node):
         self.checkpoint_experiment = hyperparams.checkpoint_experiment_
         self.depth_range = hyperparams.depth_range_
         self.template_width = hyperparams.template_width_
+        self.finish_line_x = hyperparams.finish_line_
+        self.start_line_x = hyperparams.starting_line_
 
         #number of training episodes 
         self.num_episodes = 600
@@ -117,10 +119,6 @@ class dqn_controller(Node):
         self.command.pitch = 0.0
         self.command.yaw = 0.0
         self.command.heave = 0.0
-
-        #end of trajectory
-        self.finish_line_x = 70
-        self.start_line_x = -70
 
         #reset command
         self.reset_client = self.create_client(SetPosition, '/simulator/set_position')
@@ -252,7 +250,6 @@ class dqn_controller(Node):
             reward = hyperparams.goal_reached_reward_
             self.episode_rewards.append(reward)
         else:
-            print('Goal not reached')
             reward = hyperparams.goal_not_reached_reward_
             self.episode_rewards.append(reward)
 
