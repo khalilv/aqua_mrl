@@ -39,7 +39,7 @@ class dqn_controller(Node):
         self.start_line_x = hyperparams.starting_line_
 
         #number of training episodes 
-        self.num_episodes = 600
+        self.num_episodes = 10
         self.num_reset = 0
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -79,7 +79,7 @@ class dqn_controller(Node):
 
         #trajectory recording
         self.trajectory = []
-        self.save_every = 10
+        self.save_every = 5
         self.evaluate = False 
 
         #target for reward

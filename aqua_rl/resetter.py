@@ -11,8 +11,12 @@ for i in range(len(nodes_list)):
     subprocess.run('kill -9 ' + returned_output.stdout.decode("utf-8")[:-1], shell=True)
 
 print('Resetting the simulator')
-
 time.sleep(20)
+# switch to the unity
+command = 'wmctrl -a Unity'
+subprocess.run(command, shell=True, capture_output=True)
+time.sleep(2)
+
 # re-playing the simulator
 keyboard = Controller()
 

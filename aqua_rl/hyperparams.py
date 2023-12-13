@@ -13,3 +13,5 @@ depth_range_ = [-6, -14.5]
 template_width_ = 4
 goal_reached_reward_ = 10
 goal_not_reached_reward_ = -10
+starting_line_ = -72
+finish_line_ = 70
