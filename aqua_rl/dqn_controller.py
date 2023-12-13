@@ -13,6 +13,11 @@ from aqua_rl.control.DQN import DQN
 from aqua_rl.helpers import define_template, reward_calculation
 from aqua_rl import hyperparams
 
+###
+from pynput.keyboard import Key, Controller
+import subprocess
+import time
+from multiprocessing import Process
 class dqn_controller(Node):
     def __init__(self):
         super().__init__('dqn_controller')
@@ -35,7 +40,7 @@ class dqn_controller(Node):
 
         #number of training episodes 
         self.num_episodes = 600
-
+        self.num_reset = 0
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
@@ -277,9 +282,63 @@ class dqn_controller(Node):
         if self.episode < self.num_episodes:
             self.reset()
         else:
+            subprocess.run('python3 ./src/aqua_rl/aqua_rl/resetter.py', shell=True)
+            print('The new process is initiated!')
             rclpy.shutdown()
+
         return
-    
+
+    # not being used inside this class, it's hard to manage killing this node and re-initiating another one here
+    def timely_reset(self):
+        # This includes a set of steps to take to make sure that we reset almost everything in the simulator
+        # Starting with the nodes, we have to kill the nodes
+        # our controller
+        print('Timely reset: ', self.num_reset)
+        nodes_list = ['supervisor','dqn_controller']
+        for i in range(len(nodes_list)):
+            returned_output = subprocess.run('pgrep '+nodes_list[i], capture_output=True, shell=True)
+            subprocess.run('kill -9 '+returned_output.stdout.decode("utf-8")[:-1], shell=True)
+
+        print('Resetting the simulator')
+
+        time.sleep(20)
+        # re-playing the simulator
+        keyboard = Controller()
+
+        keyboard.press(Key.ctrl)
+        keyboard.press('p')
+
+        time.sleep(2)
+
+        keyboard.release('p')
+        keyboard.release(Key.ctrl)
+
+        time.sleep(2)
+
+        keyboard.press(Key.ctrl)
+        keyboard.press('p')
+
+        time.sleep(2)
+
+        keyboard.release('p')
+        keyboard.release(Key.ctrl)
+
+        time.sleep(2)
+
+        print('Calibrating')
+        subprocess.run('ros2 service call /a13/system/calibrate std_srvs/srv/Empty', shell=True)
+
+        time.sleep(7)
+        print('switching to the swimming mode')
+        subprocess.run('ros2 service call /a13/system/set_mode aqua2_interfaces/srv/SetString "value: swimmode"', shell=True)
+
+        time.sleep(5)
+        print('Running the controller..')
+        subprocess.run('ros2 run aqua_rl dqn_controller', shell=True)
+        # the low level controller
+        self.num_reset += 1
+
+
     def reset(self):
         print('-------------- Resetting simulation --------------')
         
