@@ -118,6 +118,7 @@ class dqn_controller(Node):
             self.episode = 0
 
         #initialize command
+        self.num_episodes = self.episode + self.num_episodes
         self.command = Command()
         self.command.speed = 0.0 
         self.command.roll = 0.0

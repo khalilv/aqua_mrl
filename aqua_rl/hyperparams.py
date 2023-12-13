@@ -1,7 +1,7 @@
 queue_size_ = 5
 roll_gains_ = [0.25, 0.0, 0.75]
 history_size_ = 10
-speed_ = 0.25
+speed_ = 0.5
 pitch_limit_ = 0.005
 yaw_limit_ = 0.25
 yaw_action_space_ = 3
