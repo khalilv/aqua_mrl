@@ -5,7 +5,7 @@ import time
 # Starting with the nodes, we have to kill the nodes
 # our controller
 print('Timely reset initiated...')
-nodes_list = ['supervisor','dqn_controller']
+nodes_list = ['supervisor','dqn_controller','default_server_']
 for i in range(len(nodes_list)):
     returned_output = subprocess.run('pgrep ' + nodes_list[i], capture_output=True, shell=True)
     subprocess.run('kill -9 ' + returned_output.stdout.decode("utf-8")[:-1], shell=True)
@@ -14,7 +14,7 @@ print('Resetting the simulator')
 time.sleep(20)
 # switch to the unity
 command = 'wmctrl -a Unity'
-subprocess.run(command, shell=True, capture_output=True)
+subprocess.run(command, shell=True)
 time.sleep(2)
 
 # re-playing the simulator
