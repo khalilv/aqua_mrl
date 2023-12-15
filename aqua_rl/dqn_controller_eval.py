@@ -21,17 +21,20 @@ class dqn_controller_eval(Node):
         self.queue_size = hyperparams.queue_size_
         self.roll_gains = hyperparams.roll_gains_
         self.history_size = hyperparams.history_size_
-        self.heave_limit = hyperparams.heave_limit_
+        self.pitch_limit = hyperparams.pitch_limit_
         self.yaw_limit = hyperparams.yaw_limit_
         self.yaw_action_space = hyperparams.yaw_action_space_
-        self.heave_action_space = hyperparams.heave_action_space_
+        self.pitch_action_space = hyperparams.pitch_action_space_
         self.img_size = hyperparams.img_size_
         self.empty_state_max = hyperparams.empty_state_max_
         self.checkpoint_experiment = hyperparams.checkpoint_experiment_
         self.depth_range = hyperparams.depth_range_
+        self.target_depth = hyperparams.target_depth_
         self.template_width = hyperparams.template_width_
         self.finish_line_x = hyperparams.finish_line_
         self.start_line_x = hyperparams.starting_line_
+        self.alpha = hyperparams.alpha_
+        self.beta = hyperparams.beta_
 
         #episode to load weights from
         self.checkpoint_episode = 414
@@ -62,13 +65,17 @@ class dqn_controller_eval(Node):
 
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
         self.measured_roll_angle = 0.0
+
+        self.relative_depth = None
         
-        #dqn controller for yaw and heave
+        #dqn controller for yaw and pitch
         self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
-        self.heave_actions = np.linspace(-self.heave_limit, self.heave_limit, self.heave_action_space)
-        self.dqn = DQN(int(self.yaw_action_space + self.heave_action_space), self.history_size) 
-        self.history_queue = []
-        self.action_history_queue = []
+        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
+        self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
+        self.image_history = []
+        self.action_history = []
+        self.depth_history = []
+
         self.episode_rewards = []
 
         #target for reward
@@ -117,7 +124,8 @@ class dqn_controller_eval(Node):
             return
         
         self.measured_roll_angle = self.calculate_roll(imu)
-        
+        self.relative_depth = self.calculate_relative_depth(imu)
+
         if imu.x > self.finish_line_x:
             self.flush_commands = 0
             self.finished = True
@@ -144,7 +152,14 @@ class dqn_controller_eval(Node):
     def calculate_roll(self, imu):
         return imu.roll
     
+    def calculate_relative_depth(self, imu):
+        return imu.y - self.target_depth
+    
     def segmentation_callback(self, seg_map):
+
+        #exit if depth has not been measured
+        if self.relative_depth is None:
+            return 
         
         #flush image queue
         if self.flush_segmentation < self.flush_steps:
@@ -170,14 +185,17 @@ class dqn_controller_eval(Node):
             return
 
         seg_map = np.array(seg_map.data).reshape(self.img_size)
-        if len(self.history_queue) < self.history_size:
-            self.history_queue.append(seg_map)
-            self.action_history_queue.append([0.0,0.0])
+        if len(self.image_history) < self.history_size:
+            self.depth_history.append(self.relative_depth)
+            self.image_history.append(seg_map)
+            self.action_history.append([0.0,0.0])
         else:
-            self.history_queue.pop(0)
-            self.history_queue.append(seg_map)
-            s = np.array(self.history_queue)
-            sa = np.array(self.action_history_queue).flatten()
+            self.image_history.pop(0)
+            self.image_history.append(seg_map)
+            self.depth_history.pop(0)
+            self.depth_history.append(self.relative_depth)
+            s = np.array(self.image_history)
+            si = np.hstack((np.array(self.action_history), np.expand_dims(np.array(self.depth_history), axis= 1))).flatten()
             
             #check for empty input from vision module
             if s.sum() == 0:
@@ -194,22 +212,17 @@ class dqn_controller_eval(Node):
                 return
             
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            state_actions = torch.tensor(sa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            state_actions = torch.tensor(si, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
 
-            reward = reward_calculation(seg_map, self.template)
+            reward = reward_calculation(seg_map, self.relative_depth, self.template, self.alpha, self.beta)
             self.episode_rewards.append(reward)
             action = self.dqn.select_eval_action(state, state_actions)
 
             action_idx = action.detach().cpu().numpy()[0][0]
-            if action_idx < self.yaw_action_space:
-                self.command.heave = 0.0
-                self.command.yaw = self.yaw_actions[action_idx]
-            else:
-                self.command.heave = self.heave_actions[action_idx - self.yaw_action_space]
-                self.command.yaw = 0.0
-                
-            self.action_history_queue.pop(0)
-            self.action_history_queue.append([self.command.heave, self.command.yaw])
+            self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
+            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]
+            self.action_history.pop(0)
+            self.action_history.append([self.command.pitch, self.command.yaw])
             
             self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
@@ -260,6 +273,7 @@ class dqn_controller_eval(Node):
 
         #reset pid controllers
         self.measured_roll_angle = 0.0
+        self.relative_depth = None
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
 
         #increment episode and reset rewards
@@ -270,13 +284,18 @@ class dqn_controller_eval(Node):
         self.trajectory = []
         
         #reset history queue
-        self.history_queue = []
-        self.action_history_queue = []
+        self.image_history = []
+        self.action_history = []
+        self.depth_history = []
 
         #reset flush queues 
         self.flush_commands = self.flush_steps
+        self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
+
+        #reset counters
+        self.empty_state_counter = 0
 
         #reset end conditions 
         self.finished = False
