@@ -3,17 +3,19 @@ from matplotlib import pyplot as plt
 import os 
 import torch 
 
-def episodic_returns(dir):
+def episodic_returns(exp):
+    t_dir = './trajectories/dqn/{}'.format(str(exp))
+    e_dir = './checkpoints/dqn/{}'.format(str(exp))
     train_returns = []
     train_x = []
     eval_returns = []
     eval_x = []
-    for i, file_path in enumerate(sorted(os.listdir(dir))):
+    for i, file_path in enumerate(sorted(os.listdir(t_dir))):
         # check if current file_path is a file
-        file = os.path.join(dir, file_path)
+        file = os.path.join(t_dir, file_path)
         with open(file, 'rb') as f:
             r = np.load(f)
-            if i % 10 == 0:
+            if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
                 eval_returns.append(np.sum(r))
                 eval_x.append(i)
             else:
@@ -27,6 +29,36 @@ def episodic_returns(dir):
     plt.title('Episodic Rewards')
     plt.legend()
     plt.show()
+
+def depth_distribution(exp):
+    t_dir = './trajectories/dqn/{}'.format(str(exp))
+    e_dir = './checkpoints/dqn/{}'.format(str(exp))
+    train_depth_mean = []
+    train_depth_std = []
+    train_x = []
+    eval_depth_mean = []
+    eval_depth_std = []
+    eval_x = []
+    for i, file_path in enumerate(sorted(os.listdir(t_dir))):
+        # check if current file_path is a file
+        file = os.path.join(t_dir, file_path)
+        with open(file, 'rb') as f:
+            _ = np.load(f)
+            trajectory = np.load(f)
+            depths = np.array(trajectory[:,1])
+            if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
+                eval_depth_mean.append(np.mean(depths))
+                eval_depth_std.append(np.std(depths))
+                eval_x.append(i)
+            else:
+                train_depth_mean.append(np.mean(depths))
+                train_depth_std.append(np.std(depths))
+                train_x.append(i)
+                        
+    plt.errorbar(x=train_x, y=train_depth_mean, yerr=train_depth_std, ecolor='red', fmt='.')
+    plt.errorbar(x=eval_x, y=eval_depth_mean, yerr=eval_depth_std, ecolor='yellow', fmt='o')
+    plt.show()
+
 
 def remove_erm(file):
     checkpoint = torch.load(file, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
@@ -60,10 +92,11 @@ def plot_trajectory(file, target):
     plt.legend()
     plt.show()
 
-directory = './trajectories/dqn/0'
-file = './trajectories/dqn/0/episode_00510.npy'
+experiment = 3
+file = './trajectories/dqn/3/episode_00396.npy'
 target = './trajectories/targets/rope_center.npy'
 
-episodic_returns(directory)
+episodic_returns(experiment)
+depth_distribution(experiment)
 plot_trajectory(file, target)
 

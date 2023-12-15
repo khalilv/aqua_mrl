@@ -53,7 +53,7 @@ class segmentation(Node):
         pred = pred.astype(np.uint8)
         pred = cv2.resize(pred, self.img_size)
 
-        # self.publish_reward(pred)
+        self.publish_reward(pred)
 
         #publish state
         self.seg_map.data = pred.flatten().tolist()
@@ -71,8 +71,8 @@ class segmentation(Node):
         #target for reward
         template = np.zeros(self.img_size)
         half = int(self.img_size[0]/2)
-        template[:,half-2:half+2] = 1
-        template = self.template.astype(np.uint8)
+        template[:,half-1:half+1] = 1
+        template = template.astype(np.uint8)
 
         # Calculate intersection and union
         intersection = np.logical_and(seg_map, template)

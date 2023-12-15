@@ -59,7 +59,7 @@ class DQN:
         self.GAMMA = 0.99
         self.EPS_START = 0.9
         self.EPS_END = 0.1
-        self.EPS_DECAY = 250000
+        self.EPS_DECAY = 100000
         self.TAU = 0.002
         LR = 1e-4
         self.MEMORY_SIZE = 100000

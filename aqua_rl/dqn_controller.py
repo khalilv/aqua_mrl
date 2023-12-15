@@ -12,12 +12,12 @@ from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN
 from aqua_rl.helpers import define_template, reward_calculation
 from aqua_rl import hyperparams
-
-###
 from pynput.keyboard import Key, Controller
 import subprocess
 import time
 from multiprocessing import Process
+
+
 class dqn_controller(Node):
     def __init__(self):
         super().__init__('dqn_controller')
@@ -26,10 +26,10 @@ class dqn_controller(Node):
         self.queue_size = hyperparams.queue_size_
         self.roll_gains = hyperparams.roll_gains_
         self.history_size = hyperparams.history_size_
-        self.pitch_limit = hyperparams.pitch_limit_
+        self.heave_limit = hyperparams.heave_limit_
         self.yaw_limit = hyperparams.yaw_limit_
         self.yaw_action_space = hyperparams.yaw_action_space_
-        self.pitch_action_space = hyperparams.pitch_action_space_
+        self.heave_action_space = hyperparams.heave_action_space_
         self.img_size = hyperparams.img_size_
         self.empty_state_max = hyperparams.empty_state_max_
         self.checkpoint_experiment = hyperparams.checkpoint_experiment_
@@ -39,8 +39,8 @@ class dqn_controller(Node):
         self.start_line_x = hyperparams.starting_line_
 
         #number of training episodes 
-        self.num_episodes = 10
-        self.num_reset = 0
+        self.train_for = 2
+        
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
@@ -53,6 +53,8 @@ class dqn_controller(Node):
         #flush queues
         self.flush_steps = self.queue_size + 30
         self.flush_commands = self.flush_steps
+        self.zero_command_steps = int(self.flush_commands / 5)
+        self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
 
@@ -63,10 +65,10 @@ class dqn_controller(Node):
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
         self.measured_roll_angle = 0.0
         
-        #dqn controller for yaw and pitch 
+        #dqn controller for yaw and heave 
         self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
-        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
-        self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
+        self.heave_actions = np.linspace(-self.heave_limit, self.heave_limit, self.heave_action_space)
+        self.dqn = DQN(int(self.yaw_action_space + self.heave_action_space), self.history_size) 
         self.state = None
         self.next_state = None
         self.state_actions = None
@@ -79,7 +81,7 @@ class dqn_controller(Node):
 
         #trajectory recording
         self.trajectory = []
-        self.save_every = 5
+        self.save_every = 3
         self.evaluate = False 
 
         #target for reward
@@ -116,6 +118,9 @@ class dqn_controller(Node):
             os.mkdir(os.path.join(self.save_path, 'erm'))
             self.save_memory_path = os.path.join(self.save_path, 'erm')
             self.episode = 0
+        
+        #set stopping point
+        self.stop_episode = self.episode + self.train_for
 
         #initialize command
         self.num_episodes = self.episode + self.num_episodes
@@ -179,6 +184,14 @@ class dqn_controller(Node):
 
         #flush out command queue
         if self.flush_commands < self.flush_steps:
+            if self.zero_commands < self.zero_command_steps:
+                self.command.speed = hyperparams.speed_ 
+                self.command.roll = 0.0
+                self.command.pitch = 0.0
+                self.command.yaw = 0.0
+                self.command.heave = 0.0
+                self.command_publisher.publish(self.command)
+                self.zero_commands += 1
             self.flush_commands += 1
             return
         
@@ -240,10 +253,15 @@ class dqn_controller(Node):
                 self.dqn.target_net.load_state_dict(target_net_state_dict)
             
             action_idx = self.action.detach().cpu().numpy()[0][0]
-            self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
-            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]
+            if action_idx < self.yaw_action_space:
+                self.command.heave = 0.0
+                self.command.yaw = self.yaw_actions[action_idx]
+            else:
+                self.command.heave = self.heave_actions[action_idx - self.yaw_action_space]
+                self.command.yaw = 0.0
+                
             self.action_history_queue.pop(0)
-            self.action_history_queue.append([self.command.pitch, self.command.yaw])
+            self.action_history_queue.append([self.command.heave, self.command.yaw])
             
             self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
@@ -280,65 +298,11 @@ class dqn_controller(Node):
         with open(self.traj_save_path + '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
             np.save(f, self.episode_rewards)
             np.save(f, np.array(self.trajectory))
-        if self.episode < self.num_episodes:
+        if self.episode < self.stop_episode:
             self.reset()
         else:
             subprocess.run('python3 ./src/aqua_rl/aqua_rl/resetter.py', shell=True)
-            print('The new process is initiated!')
-            rclpy.shutdown()
-
         return
-
-    # not being used inside this class, it's hard to manage killing this node and re-initiating another one here
-    def timely_reset(self):
-        # This includes a set of steps to take to make sure that we reset almost everything in the simulator
-        # Starting with the nodes, we have to kill the nodes
-        # our controller
-        print('Timely reset: ', self.num_reset)
-        nodes_list = ['supervisor','dqn_controller']
-        for i in range(len(nodes_list)):
-            returned_output = subprocess.run('pgrep '+nodes_list[i], capture_output=True, shell=True)
-            subprocess.run('kill -9 '+returned_output.stdout.decode("utf-8")[:-1], shell=True)
-
-        print('Resetting the simulator')
-
-        time.sleep(20)
-        # re-playing the simulator
-        keyboard = Controller()
-
-        keyboard.press(Key.ctrl)
-        keyboard.press('p')
-
-        time.sleep(2)
-
-        keyboard.release('p')
-        keyboard.release(Key.ctrl)
-
-        time.sleep(2)
-
-        keyboard.press(Key.ctrl)
-        keyboard.press('p')
-
-        time.sleep(2)
-
-        keyboard.release('p')
-        keyboard.release(Key.ctrl)
-
-        time.sleep(2)
-
-        print('Calibrating')
-        subprocess.run('ros2 service call /a13/system/calibrate std_srvs/srv/Empty', shell=True)
-
-        time.sleep(7)
-        print('switching to the swimming mode')
-        subprocess.run('ros2 service call /a13/system/set_mode aqua2_interfaces/srv/SetString "value: swimmode"', shell=True)
-
-        time.sleep(5)
-        print('Running the controller..')
-        subprocess.run('ros2 run aqua_rl dqn_controller', shell=True)
-        # the low level controller
-        self.num_reset += 1
-
 
     def reset(self):
         print('-------------- Resetting simulation --------------')
@@ -383,6 +347,7 @@ class dqn_controller(Node):
 
         #reset flush queues 
         self.flush_commands = self.flush_steps
+        self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
 

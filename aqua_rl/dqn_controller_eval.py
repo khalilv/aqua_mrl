@@ -21,10 +21,10 @@ class dqn_controller_eval(Node):
         self.queue_size = hyperparams.queue_size_
         self.roll_gains = hyperparams.roll_gains_
         self.history_size = hyperparams.history_size_
-        self.pitch_limit = hyperparams.pitch_limit_
+        self.heave_limit = hyperparams.heave_limit_
         self.yaw_limit = hyperparams.yaw_limit_
         self.yaw_action_space = hyperparams.yaw_action_space_
-        self.pitch_action_space = hyperparams.pitch_action_space_
+        self.heave_action_space = hyperparams.heave_action_space_
         self.img_size = hyperparams.img_size_
         self.empty_state_max = hyperparams.empty_state_max_
         self.checkpoint_experiment = hyperparams.checkpoint_experiment_
@@ -34,10 +34,10 @@ class dqn_controller_eval(Node):
         self.start_line_x = hyperparams.starting_line_
 
         #episode to load weights from
-        self.checkpoint_episode = 330
+        self.checkpoint_episode = 414
 
         #number of eval episodes 
-        self.num_eval_episodes = 10
+        self.num_eval_episodes = 5
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -51,6 +51,8 @@ class dqn_controller_eval(Node):
         #flush queues
         self.flush_steps = self.queue_size + 30
         self.flush_commands = self.flush_steps
+        self.zero_command_steps = int(self.flush_commands / 5)
+        self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
 
@@ -61,10 +63,10 @@ class dqn_controller_eval(Node):
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
         self.measured_roll_angle = 0.0
         
-        #dqn controller for yaw and pitch 
+        #dqn controller for yaw and heave
         self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
-        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
-        self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
+        self.heave_actions = np.linspace(-self.heave_limit, self.heave_limit, self.heave_action_space)
+        self.dqn = DQN(int(self.yaw_action_space + self.heave_action_space), self.history_size) 
         self.history_queue = []
         self.action_history_queue = []
         self.episode_rewards = []
@@ -151,6 +153,14 @@ class dqn_controller_eval(Node):
 
         #flush out command queue
         if self.flush_commands < self.flush_steps:
+            if self.zero_commands < self.zero_command_steps:
+                self.command.speed = hyperparams.speed_ 
+                self.command.roll = 0.0
+                self.command.pitch = 0.0
+                self.command.yaw = 0.0
+                self.command.heave = 0.0
+                self.command_publisher.publish(self.command)
+                self.zero_commands += 1
             self.flush_commands += 1
             return
         
@@ -191,10 +201,15 @@ class dqn_controller_eval(Node):
             action = self.dqn.select_eval_action(state, state_actions)
 
             action_idx = action.detach().cpu().numpy()[0][0]
-            self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
-            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]
+            if action_idx < self.yaw_action_space:
+                self.command.heave = 0.0
+                self.command.yaw = self.yaw_actions[action_idx]
+            else:
+                self.command.heave = self.heave_actions[action_idx - self.yaw_action_space]
+                self.command.yaw = 0.0
+                
             self.action_history_queue.pop(0)
-            self.action_history_queue.append([self.command.pitch, self.command.yaw])
+            self.action_history_queue.append([self.command.heave, self.command.yaw])
             
             self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
