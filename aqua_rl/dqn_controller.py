@@ -40,7 +40,7 @@ class dqn_controller(Node):
         self.start_line_x = hyperparams.starting_line_
         self.alpha = hyperparams.alpha_
         self.beta = hyperparams.beta_
-        self.max_duration = hyperparams.max_duration_
+        # self.max_duration = hyperparams.max_duration_
 
         #number of training episodes 
         self.train_for = 9
@@ -96,7 +96,7 @@ class dqn_controller(Node):
         
         #stopping condition for empty vision input
         self.empty_state_counter = 0
-        self.duration_counter = 0
+        # self.duration_counter = 0
 
         self.root_path = 'src/aqua_rl/checkpoints/dqn/'
         try:
@@ -376,7 +376,7 @@ class dqn_controller(Node):
 
         #reset counters
         self.empty_state_counter = 0
-        self.duration_counter = 0
+        # self.duration_counter = 0
 
         #reset end conditions 
         self.finished = False

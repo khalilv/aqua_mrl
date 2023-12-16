@@ -18,3 +18,4 @@ starting_line_ = -72
 finish_line_ = 70
 alpha_ = 0.5
 beta_ = 0.5
+# max_duration_ = 1000
