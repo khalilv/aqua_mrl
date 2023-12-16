@@ -40,9 +40,10 @@ class dqn_controller(Node):
         self.start_line_x = hyperparams.starting_line_
         self.alpha = hyperparams.alpha_
         self.beta = hyperparams.beta_
+        self.max_duration = hyperparams.max_duration_
 
         #number of training episodes 
-        self.train_for = 2
+        self.train_for = 9
         
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -87,7 +88,7 @@ class dqn_controller(Node):
 
         #trajectory recording
         self.trajectory = []
-        self.save_every = 3
+        self.save_every = 10
         self.evaluate = False 
 
         #target for reward
@@ -95,6 +96,7 @@ class dqn_controller(Node):
         
         #stopping condition for empty vision input
         self.empty_state_counter = 0
+        self.duration_counter = 0
 
         self.root_path = 'src/aqua_rl/checkpoints/dqn/'
         try:
@@ -224,8 +226,8 @@ class dqn_controller(Node):
             self.depth_history.pop(0)
             self.depth_history.append(self.relative_depth)
             ns = np.array(self.image_history)
-            nsi = np.hstack((np.array(self.action_history), np.expand_dims(np.array(self.depth_history), axis= 1))).flatten()
-
+            nsi = np.concatenate((np.array(self.action_history).flatten(), np.array(self.depth_history))).flatten()
+            
             #check for empty input from vision module
             if ns.sum() == 0:
                 self.empty_state_counter += 1
@@ -239,6 +241,14 @@ class dqn_controller(Node):
                 self.finished = True
                 self.complete = False
                 return
+
+            # self.duration_counter += 1
+            # if self.duration_counter >= self.max_duration:
+            #     print("Reached max duration")
+            #     self.flush_commands = 0
+            #     self.finished = True
+            #     self.complete = True
+            #     return
             
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_info = torch.tensor(nsi, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
@@ -363,6 +373,10 @@ class dqn_controller(Node):
         self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
+
+        #reset counters
+        self.empty_state_counter = 0
+        self.duration_counter = 0
 
         #reset end conditions 
         self.finished = False

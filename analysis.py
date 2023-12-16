@@ -92,7 +92,7 @@ def plot_trajectory(file, target):
     plt.legend()
     plt.show()
 
-experiment = 3
+experiment = 4
 file = './trajectories/dqn/3/episode_00396.npy'
 target = './trajectories/targets/rope_center.npy'
 
