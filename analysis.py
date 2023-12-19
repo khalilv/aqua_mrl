@@ -80,22 +80,12 @@ def plot_trajectory(file, target):
     plt.legend()
     plt.show()
 
-def reset_to_checkpoint(exp, episode):
-    traj = './experiments/{}/trajectories/'.format(str(exp))
-    weights = './experiments/{}/weights/'.format(str(exp))
-    for file_path in sorted(os.listdir(weights)):
-        if int(file_path[8:13]) > episode:
-            os.remove(os.path.join(weights, file_path))
-    for file_path in sorted(os.listdir(traj)):
-        if int(file_path[8:13]) > episode:
-            os.remove(os.path.join(traj, file_path))
 
 experiment = 0
 file = './trajectories/dqn/3/episode_00396.npy'
 target = './trajectories/targets/rope_center.npy'
 
 episodic_returns(experiment)
-reset_to_checkpoint(experiment, 20)
 
 depth_distribution(experiment)
 plot_trajectory(file, target)
