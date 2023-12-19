@@ -7,13 +7,12 @@ from aqua2_interfaces.msg import Command, AquaPose
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
 from std_msgs.msg import UInt8MultiArray
-from time import sleep
+from time import sleep, time
 from aqua_rl.control.PID import AnglePID
-from aqua_rl.control.DQN import DQN
+from aqua_rl.control.DQN import DQN, ReplayMemory
 from aqua_rl.helpers import define_template, reward_calculation
 from aqua_rl import hyperparams
 import subprocess
-
 
 class dqn_controller(Node):
     def __init__(self):
@@ -81,7 +80,8 @@ class dqn_controller(Node):
         self.action_history = []
         self.depth_history = []
         self.episode_rewards = []
-
+        self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
+        
         #trajectory recording
         self.trajectory = []
         self.evaluate = False 
@@ -106,9 +106,15 @@ class dqn_controller(Node):
             self.dqn.steps_done = checkpoint['training_steps']
             
             if self.load_erm:
-                memory = torch.load(self.save_memory_path + '/memory.pt', map_location=self.dqn.device)
-                self.dqn.memory.memory = memory['memory']
-                print('ERM size: ', self.dqn.memory.__len__())
+                print('Loading ERM from previous experience. Note this may take time')
+                t0 = time()
+                for file_path in sorted(os.listdir(self.save_memory_path), reverse=True):
+                    if self.dqn.memory.__len__() < self.dqn.MEMORY_SIZE:
+                        memory = torch.load(os.path.join(self.save_memory_path, file_path), map_location=self.dqn.device)
+                        erm = memory['memory']
+                        self.dqn.memory.memory += erm.memory
+                t1 = time()
+                print('ERM size: ', self.dqn.memory.__len__(), '. Time taken to load: ', t1 - t0)
             else:
                 print('WARNING: weights loaded but starting from a fresh replay memory')
             
@@ -260,6 +266,7 @@ class dqn_controller(Node):
             else:
                 if self.state is not None and self.action is not None and self.state_info is not None:
                     self.dqn.memory.push(self.state, self.state_info, self.action, self.next_state, self.next_state_info, self.reward)
+                    self.erm.push(self.state, self.state_info, self.action, self.next_state, self.next_state_info, self.reward)
 
                 self.action = self.dqn.select_action(self.next_state, self.next_state_info)       
                 self.state = self.next_state
@@ -301,6 +308,8 @@ class dqn_controller(Node):
 
         if self.state is not None and self.state_info is not None and not self.evaluate:
             self.dqn.memory.push(self.state, self.state_info, self.action, None, None, torch.tensor([reward], device=self.dqn.device))
+            self.erm.push(self.state, self.state_info, self.action, None, None, torch.tensor([reward], device=self.dqn.device))
+
         
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
@@ -311,8 +320,8 @@ class dqn_controller(Node):
                 'optimizer_state_dict': self.dqn.optimizer.state_dict(),
             }, self.save_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)))
             torch.save({
-                'memory': self.dqn.memory.memory
-            }, self.save_memory_path +  '/memory.pt')
+                'memory': self.erm
+            }, self.save_memory_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)))
         
         with open(self.save_traj_path + '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
             np.save(f, self.episode_rewards)
