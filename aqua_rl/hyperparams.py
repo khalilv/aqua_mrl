@@ -16,13 +16,13 @@ pitch_action_space_ = 3
 #end of episode hyperparams
 empty_state_max_ = 10
 depth_range_ = [-6, -14.5]
-target_depth_ = -12
 starting_line_ = -72
 finish_line_ = 70
 max_duration_ = 20
 
 #reward hyperparams
 template_width_ = 2
+target_depth_ = -11
 goal_reached_reward_ = 10
 goal_not_reached_reward_ = -10
 alpha_ = 0.5
