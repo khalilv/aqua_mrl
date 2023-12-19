@@ -99,12 +99,12 @@ class dqn_controller(Node):
             self.save_memory_path = os.path.join(self.root_path, 'erm')
             self.save_traj_path = os.path.join(self.root_path, 'trajectories')
             last_checkpoint = max(sorted(os.listdir(self.save_path)))
-            self.episode = int(last_checkpoint[8:13])
             checkpoint = torch.load(os.path.join(self.save_path, last_checkpoint), map_location=self.dqn.device)
             self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
             self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
             self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.dqn.steps_done = checkpoint['training_steps']
+            
             if self.load_erm:
                 memory = torch.load(self.save_memory_path + '/memory.pt', map_location=self.dqn.device)
                 self.dqn.memory.memory = memory['memory']
@@ -112,6 +112,8 @@ class dqn_controller(Node):
             else:
                 print('WARNING: weights loaded but starting from a fresh replay memory')
             
+            self.episode = int(last_checkpoint[8:13]) + 1
+            self.stop_episode = self.episode + self.train_for - 1
             print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.dqn.steps_done)
         else:
             print('WARNING: starting a new experiment as experiment {} does not exist'.format(str(self.experiment_number)))
@@ -123,11 +125,9 @@ class dqn_controller(Node):
             self.save_memory_path = os.path.join(self.root_path, 'erm')
             self.save_traj_path = os.path.join(self.root_path, 'trajectories')
             self.episode = 0
+            self.stop_episode = self.episode + self.train_for
             print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
         
-        #set stopping point
-        self.stop_episode = self.episode + self.train_for
-
         #initialize command
         self.command = Command()
         self.command.speed = 0.0 
