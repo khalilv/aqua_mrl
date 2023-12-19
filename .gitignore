@@ -9,4 +9,5 @@ aqua_rl/YOLOv7/weights/
 checkpoints/
 evaluations/
 trajectories/
+experiments/
 

@@ -22,8 +22,7 @@ class DeepLabv3:
         return
 
     def load_model(self, n_classes):
-        model = models.segmentation.deeplabv3_mobilenet_v3_large(
-            pretrained=True, progress=True)
+        model = models.segmentation.deeplabv3_mobilenet_v3_large(weights=models.segmentation.DeepLabV3_MobileNet_V3_Large_Weights.DEFAULT, progress=True)
         # freeze weights
         for param in model.parameters():
             param.requires_grad = False

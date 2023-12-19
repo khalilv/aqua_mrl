@@ -12,10 +12,7 @@ from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN
 from aqua_rl.helpers import define_template, reward_calculation
 from aqua_rl import hyperparams
-from pynput.keyboard import Key, Controller
 import subprocess
-import time
-from multiprocessing import Process
 
 
 class dqn_controller(Node):
@@ -32,7 +29,6 @@ class dqn_controller(Node):
         self.pitch_action_space = hyperparams.pitch_action_space_
         self.img_size = hyperparams.img_size_
         self.empty_state_max = hyperparams.empty_state_max_
-        self.checkpoint_experiment = hyperparams.checkpoint_experiment_
         self.depth_range = hyperparams.depth_range_
         self.target_depth = hyperparams.target_depth_
         self.template_width = hyperparams.template_width_
@@ -40,11 +36,11 @@ class dqn_controller(Node):
         self.start_line_x = hyperparams.starting_line_
         self.alpha = hyperparams.alpha_
         self.beta = hyperparams.beta_
+        self.load_erm = hyperparams.load_erm_ 
+        self.experiment_number = hyperparams.experiment_number_
         # self.max_duration = hyperparams.max_duration_
-
-        #number of training episodes 
-        self.train_for = 9
-        
+        self.train_for = hyperparams.train_for_
+       
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
@@ -88,44 +84,46 @@ class dqn_controller(Node):
 
         #trajectory recording
         self.trajectory = []
-        self.save_every = 10
         self.evaluate = False 
 
         #target for reward
         self.template = define_template(self.img_size, self.template_width)
         
-        #stopping condition for empty vision input
+        #stopping conditions
         self.empty_state_counter = 0
         # self.duration_counter = 0
 
-        self.root_path = 'src/aqua_rl/checkpoints/dqn/'
-        try:
-            self.save_path = os.path.join(self.root_path, str(self.checkpoint_experiment))
-            self.save_memory_path = os.path.join(self.save_path, 'erm')
-            self.traj_save_path = os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.checkpoint_experiment))
-            eps = len(os.listdir(self.traj_save_path)) - 1
-            last_checkpoint_ep = (eps // self.save_every) * self.save_every
-            checkpoint_path = self.save_path + '/episode_' + str(last_checkpoint_ep).zfill(5) + '.pt'
-            checkpoint = torch.load(checkpoint_path, map_location=self.dqn.device)
+        self.root_path = 'src/aqua_rl/experiments/{}'.format(str(self.experiment_number))
+        if os.path.exists(self.root_path):
+            self.save_path = os.path.join(self.root_path, 'weights')
+            self.save_memory_path = os.path.join(self.root_path, 'erm')
+            self.save_traj_path = os.path.join(self.root_path, 'trajectories')
+            last_checkpoint = max(sorted(os.listdir(self.save_path)))
+            self.episode = int(last_checkpoint[8:13])
+            checkpoint = torch.load(os.path.join(self.save_path, last_checkpoint), map_location=self.dqn.device)
             self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
             self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
             self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            memory = torch.load(self.save_memory_path + '/memory.pt', map_location=self.dqn.device)
-            self.dqn.memory.memory = memory['memory']
-            print('ERM size: ', self.dqn.memory.__len__())
             self.dqn.steps_done = checkpoint['training_steps']
-            self.episode = last_checkpoint_ep + 1
+            if self.load_erm:
+                memory = torch.load(self.save_memory_path + '/memory.pt', map_location=self.dqn.device)
+                self.dqn.memory.memory = memory['memory']
+                print('ERM size: ', self.dqn.memory.__len__())
+            else:
+                print('WARNING: weights loaded but starting from a fresh replay memory')
+            
             print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.dqn.steps_done)
-        except:
-            print('No checkpoint found. Starting from episode 0')
-            self.new_checkpoint_experiment = len(os.listdir(self.root_path))
-            os.mkdir(os.path.join(self.root_path, str(self.new_checkpoint_experiment)))
-            os.mkdir(os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.new_checkpoint_experiment)))
-            self.traj_save_path = os.path.join(self.root_path.replace('checkpoints', 'trajectories'), str(self.new_checkpoint_experiment))
-            self.save_path = os.path.join(self.root_path, str(self.new_checkpoint_experiment))
-            os.mkdir(os.path.join(self.save_path, 'erm'))
-            self.save_memory_path = os.path.join(self.save_path, 'erm')
+        else:
+            print('WARNING: starting a new experiment as experiment {} does not exist'.format(str(self.experiment_number)))
+            os.mkdir(self.root_path)
+            os.mkdir(os.path.join(self.root_path, 'weights'))
+            os.mkdir(os.path.join(self.root_path, 'erm'))
+            os.mkdir(os.path.join(self.root_path, 'trajectories'))
+            self.save_path = os.path.join(self.root_path, 'weights')
+            self.save_memory_path = os.path.join(self.root_path, 'erm')
+            self.save_traj_path = os.path.join(self.root_path, 'trajectories')
             self.episode = 0
+            print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
         
         #set stopping point
         self.stop_episode = self.episode + self.train_for
@@ -243,7 +241,7 @@ class dqn_controller(Node):
                 return
 
             # self.duration_counter += 1
-            # if self.duration_counter >= self.max_duration:
+            # if self.duration_counter > self.max_duration:
             #     print("Reached max duration")
             #     self.flush_commands = 0
             #     self.finished = True
@@ -304,7 +302,7 @@ class dqn_controller(Node):
         if self.state is not None and self.state_info is not None and not self.evaluate:
             self.dqn.memory.push(self.state, self.state_info, self.action, None, None, torch.tensor([reward], device=self.dqn.device))
         
-        if self.episode % self.save_every == 0:
+        if self.episode == self.stop_episode:
             print('Saving checkpoint')
             torch.save({
                 'training_steps': self.dqn.steps_done,
@@ -316,9 +314,10 @@ class dqn_controller(Node):
                 'memory': self.dqn.memory.memory
             }, self.save_memory_path +  '/memory.pt')
         
-        with open(self.traj_save_path + '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
+        with open(self.save_traj_path + '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
             np.save(f, self.episode_rewards)
             np.save(f, np.array(self.trajectory))
+        
         if self.episode < self.stop_episode:
             self.reset()
         else:
@@ -352,7 +351,7 @@ class dqn_controller(Node):
         #increment episode and reset rewards
         self.episode_rewards = []
         self.episode += 1
-        self.evaluate = self.episode % self.save_every == 0
+        self.evaluate = self.episode == self.stop_episode
 
         if self.evaluate:
             print('Starting evaluation')

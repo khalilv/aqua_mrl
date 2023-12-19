@@ -4,8 +4,8 @@ import os
 import torch 
 
 def episodic_returns(exp):
-    t_dir = './trajectories/dqn/{}'.format(str(exp))
-    e_dir = './checkpoints/dqn/{}'.format(str(exp))
+    t_dir = './experiments/{}/trajectories/'.format(str(exp))
+    e_dir = './experiments/{}/weights/'.format(str(exp))
     train_returns = []
     train_x = []
     eval_returns = []
@@ -31,8 +31,8 @@ def episodic_returns(exp):
     plt.show()
 
 def depth_distribution(exp):
-    t_dir = './trajectories/dqn/{}'.format(str(exp))
-    e_dir = './checkpoints/dqn/{}'.format(str(exp))
+    t_dir = './experiments/{}/trajectories/'.format(str(exp))
+    e_dir = './experiments/{}/weights/'.format(str(exp))
     train_depth_mean = []
     train_depth_std = []
     train_x = []
@@ -60,18 +60,6 @@ def depth_distribution(exp):
     plt.show()
 
 
-def remove_erm(file):
-    checkpoint = torch.load(file, map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    torch.save({
-            'training_steps': checkpoint['training_steps'],
-            'model_state_dict_policy': checkpoint['model_state_dict_policy'],
-            'model_state_dict_target': checkpoint['model_state_dict_target'],
-            'optimizer_state_dict': checkpoint['optimizer_state_dict'],
-        }, file)
-    print(file)
-    return
-
-
 def plot_trajectory(file, target):
     with open(file, 'rb') as f:
         _ = np.load(f)
@@ -92,11 +80,25 @@ def plot_trajectory(file, target):
     plt.legend()
     plt.show()
 
-experiment = 4
+def reset_to_checkpoint(exp, episode):
+    traj = './experiments/{}/trajectories/'.format(str(exp))
+    weights = './experiments/{}/weights/'.format(str(exp))
+    for file_path in sorted(os.listdir(weights)):
+        if int(file_path[8:13]) > episode:
+            os.remove(os.path.join(weights, file_path))
+    for file_path in sorted(os.listdir(traj)):
+        if int(file_path[8:13]) > episode:
+            os.remove(os.path.join(traj, file_path))
+
+experiment = 0
 file = './trajectories/dqn/3/episode_00396.npy'
 target = './trajectories/targets/rope_center.npy'
 
 episodic_returns(experiment)
+reset_to_checkpoint(experiment, 20)
+
 depth_distribution(experiment)
 plot_trajectory(file, target)
+
+
 
