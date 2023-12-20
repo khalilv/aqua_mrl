@@ -1,7 +1,7 @@
 import os 
 
 experiment = 0 #experiment to reset
-episode = 20 #episode to reset to 
+episode = 155 #episode to reset to 
 
 print('Resetting experiment {} to episode {}'.format(str(experiment), str(episode)))
 traj = './experiments/{}/trajectories/'.format(str(experiment))
@@ -15,4 +15,4 @@ for file_path in sorted(os.listdir(traj)):
         os.remove(os.path.join(traj, file_path))
 for file_path in sorted(os.listdir(memory)):
     if int(file_path[8:13]) > episode:
-        os.remove(os.path.join(traj, file_path))
+        os.remove(os.path.join(memory, file_path))
