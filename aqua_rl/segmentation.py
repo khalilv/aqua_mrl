@@ -81,11 +81,12 @@ class segmentation(Node):
         return
     
     def publish_reward(self, seg_map):
-        r = reward_calculation(seg_map, self.relative_depth, self.template)
-        reward = Float32()
-        reward.data = r
-        self.reward_publisher.publish(reward)
-        return
+        if self.relative_depth is not None:
+            r = reward_calculation(seg_map, self.relative_depth, self.template)
+            reward = Float32()
+            reward.data = r
+            self.reward_publisher.publish(reward)
+            return
         
 def main(args=None):
     rclpy.init(args=args)
