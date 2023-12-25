@@ -8,12 +8,17 @@ from aqua_rl.DeepLabv3.deeplabv3 import DeepLabv3
 import time
 from std_msgs.msg import UInt8MultiArray, Float32
 import os
+from aqua_rl import hyperparams
+from aqua_rl.helpers import reward_calculation, define_template
 
 class segmentation(Node):
 
     def __init__(self):
         super().__init__('segmentation')
-        self.queue_size = 5
+        self.queue_size = hyperparams.queue_size_
+        self.img_size = hyperparams.img_size_
+        self.target_depth = hyperparams.target_depth_
+
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
             '/camera/back/image_raw/compressed',
@@ -21,11 +26,10 @@ class segmentation(Node):
             self.queue_size)
         self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/segmentation', self.queue_size)
         self.reward_publisher = self.create_publisher(Float32, '/a13/reward', self.queue_size)
-
+        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
         self.seg_map = UInt8MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
         self.model = DeepLabv3('src/aqua_rl/segmentation_module/models/deeplabv3_mobilenetv3_ropev2/best.pt')
-        self.img_size = (32, 32)
         
         #online dataset collection
         self.dataset_path = 'src/aqua_rl/rope_dataset/'
@@ -35,8 +39,17 @@ class segmentation(Node):
         #measuring publish frequency
         self.t0 = 0
 
+        #measured relative depth
+        self.relative_depth = None
+
+        #template for reward
+        self.template = define_template(self.img_size)
+
         cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
         print('Initialized: segmentation module')
+
+    def depth_callback(self, depth):
+        self.relative_depth = depth.data - self.target_depth
 
     def camera_callback(self, msg):
 
@@ -68,19 +81,9 @@ class segmentation(Node):
         return
     
     def publish_reward(self, seg_map):
-        #target for reward
-        template = np.zeros(self.img_size)
-        half = int(self.img_size[0]/2)
-        template[:,half-1:half+1] = 1
-        template = template.astype(np.uint8)
-
-        # Calculate intersection and union
-        intersection = np.logical_and(seg_map, template)
-        union = np.logical_or(seg_map, template)
-        iou = np.sum(intersection) / np.sum(union)
-        
+        r = reward_calculation(seg_map, self.relative_depth, self.template)
         reward = Float32()
-        reward.data = iou - 0.025
+        reward.data = r
         self.reward_publisher.publish(reward)
         return
         

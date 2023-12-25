@@ -6,7 +6,7 @@ from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
-from std_msgs.msg import UInt8MultiArray
+from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
@@ -30,19 +30,17 @@ class dqn_controller(Node):
         self.empty_state_max = hyperparams.empty_state_max_
         self.depth_range = hyperparams.depth_range_
         self.target_depth = hyperparams.target_depth_
-        self.template_width = hyperparams.template_width_
         self.finish_line_x = hyperparams.finish_line_
         self.start_line_x = hyperparams.starting_line_
-        self.alpha = hyperparams.alpha_
-        self.beta = hyperparams.beta_
         self.load_erm = hyperparams.load_erm_ 
         self.experiment_number = hyperparams.experiment_number_
-        # self.max_duration = hyperparams.max_duration_
         self.train_for = hyperparams.train_for_
-       
+        # self.max_duration = hyperparams.max_duration_
+
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
+        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
         self.segmentation_subscriber = self.create_subscription(
             UInt8MultiArray, 
             '/segmentation', 
@@ -77,7 +75,7 @@ class dqn_controller(Node):
         self.action = None
         self.reward = None
         self.image_history = []
-        self.action_history = []
+        # self.action_history = []
         self.depth_history = []
         self.episode_rewards = []
         self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
@@ -87,7 +85,7 @@ class dqn_controller(Node):
         self.evaluate = False 
 
         #target for reward
-        self.template = define_template(self.img_size, self.template_width)
+        self.template = define_template(self.img_size)
         
         #stopping conditions
         self.empty_state_counter = 0
@@ -159,7 +157,6 @@ class dqn_controller(Node):
             return
         
         self.measured_roll_angle = self.calculate_roll(imu)
-        self.relative_depth = self.calculate_relative_depth(imu)
 
         if imu.x > self.finish_line_x:
             self.flush_commands = 0
@@ -187,8 +184,8 @@ class dqn_controller(Node):
     def calculate_roll(self, imu):
         return imu.roll
     
-    def calculate_relative_depth(self, imu):
-        return imu.y - self.target_depth
+    def depth_callback(self, depth):
+        self.relative_depth = depth.data - self.target_depth
 
     def segmentation_callback(self, seg_map):
 
@@ -223,14 +220,15 @@ class dqn_controller(Node):
         if len(self.image_history) < self.history_size:
             self.depth_history.append(self.relative_depth)
             self.image_history.append(seg_map)
-            self.action_history.append([0.0,0.0])
+            # self.action_history.append([0.0,0.0])
         else:
             self.image_history.pop(0)
             self.image_history.append(seg_map)
             self.depth_history.pop(0)
             self.depth_history.append(self.relative_depth)
             ns = np.array(self.image_history)
-            nsi = np.concatenate((np.array(self.action_history).flatten(), np.array(self.depth_history))).flatten()
+            nsi = np.array(self.depth_history).flatten()
+            # nsi = np.concatenate((np.array(self.action_history).flatten(), np.array(self.depth_history))).flatten()
             
             #check for empty input from vision module
             if ns.sum() == 0:
@@ -256,7 +254,7 @@ class dqn_controller(Node):
             
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_info = torch.tensor(nsi, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = reward_calculation(seg_map, self.relative_depth, self.template, self.alpha, self.beta)
+            reward = reward_calculation(seg_map, self.relative_depth, self.template)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], device=self.dqn.device)
 
@@ -286,8 +284,8 @@ class dqn_controller(Node):
             action_idx = self.action.detach().cpu().numpy()[0][0]
             self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
             self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]
-            self.action_history.pop(0)
-            self.action_history.append([self.command.pitch, self.command.yaw])
+            # self.action_history.pop(0)
+            # self.action_history.append([self.command.pitch, self.command.yaw])
             
             self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
@@ -373,7 +371,7 @@ class dqn_controller(Node):
         self.state_info = None
         self.action = None
         self.image_history = []
-        self.action_history = []
+        # self.action_history = []
         self.depth_history = []
 
         #reset flush queues 

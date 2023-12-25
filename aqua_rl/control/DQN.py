@@ -25,37 +25,36 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
+
 class DQNNetwork(nn.Module):
 
     def __init__(self, history, n_actions):
         super(DQNNetwork, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=history, out_channels=32, kernel_size=5, stride=3),
+            nn.Conv2d(in_channels=history, out_channels=32, kernel_size=5, stride=2),
             nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2),
             nn.ReLU(),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=2, stride=1),
             nn.ReLU(),
         )
 
         self.info_fc = nn.Sequential(
-            nn.Linear(in_features= history*3, out_features= 256),
-            nn.ReLU(),
-            nn.Linear(in_features= 256, out_features= 128),
+            nn.Linear(in_features= history, out_features= 128),
             nn.ReLU(),
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(in_features= 3*3*64 + 128, out_features=256),
+            nn.Linear(in_features= 5 * 5 * 64 + 128, out_features=256),
             nn.ReLU(),
-            nn.Linear(in_features=256, out_features=n_actions),
+            nn.Linear(in_features= 256, out_features=n_actions)
         )
 
     # Called with either one element to determine next action, or a batch
     # during optimization.
     def forward(self, x, i):
         x = self.conv(x)
-        x = x.reshape((-1, 3 * 3 * 64))
+        x = x.reshape((-1, 5 * 5 * 64))
         i = self.info_fc(i)
         x = torch.cat((x, i), dim= 1)
         x = self.fc(x)
@@ -82,7 +81,7 @@ class DQN:
         self.memory = ReplayMemory(self.MEMORY_SIZE)
         self.steps_done = 0
         
-    def select_action(self, state, action):
+    def select_action(self, state, info):
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
             math.exp(-1. * self.steps_done / self.EPS_DECAY)
@@ -92,13 +91,13 @@ class DQN:
                 # t.max(1) will return the largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
-                return self.policy_net(state, action).max(1)[1].view(1, 1)
+                return self.policy_net(state, info).max(1)[1].view(1, 1)
         else:
             return torch.tensor([[int(np.random.randint(0,self.n_actions))]], device=self.device, dtype=torch.long)
     
-    def select_eval_action(self, state, action):
+    def select_eval_action(self, state, info):
         with torch.no_grad():
-            return self.target_net(state, action).max(1)[1].view(1, 1)
+            return self.target_net(state, info).max(1)[1].view(1, 1)
 
     def optimize(self):
         if len(self.memory) < self.BATCH_SIZE:
