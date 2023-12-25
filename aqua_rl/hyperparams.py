@@ -21,11 +21,11 @@ finish_line_ = 70
 # max_duration_ = 20
 
 #reward hyperparams
-target_depth_ = 10
+target_depth_ = 11
 goal_reached_reward_ = 10
 goal_not_reached_reward_ = -10
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 0
+experiment_number_ = 6
 train_for_ = 10
