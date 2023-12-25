@@ -81,12 +81,12 @@ def plot_trajectory(file, target):
     plt.show()
 
 
-experiment = 0
-file = './trajectories/dqn/3/episode_00396.npy'
-target = './trajectories/targets/rope_center.npy'
+experiment = 6
+episode = 1
+file = './experiments/{}/trajectories/episode_{}.npy'.format(experiment, str(episode).zfill(5))
+target = './rope_center.npy'
 
 episodic_returns(experiment)
-
 depth_distribution(experiment)
 plot_trajectory(file, target)
 
