@@ -54,6 +54,7 @@ class dqn_controller(Node):
         self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
+        self.flush_depths = 0
 
         #finished is episode has ended. complete is if aqua has reached the goal 
         self.finished = False
@@ -187,7 +188,17 @@ class dqn_controller(Node):
         return imu.roll
     
     def depth_callback(self, depth):
-        self.relative_depth = depth.data - self.target_depth
+        
+        #finished flag
+        if self.finished:
+            return
+
+        #flush queue
+        if self.flush_depths < self.flush_steps:
+            self.flush_depths += 1
+            return
+
+        self.relative_depth = self.target_depth - depth.data
 
     def segmentation_callback(self, seg_map):
 
@@ -263,13 +274,13 @@ class dqn_controller(Node):
 
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.action = self.dqn.select_eval_action(self.next_state, self.next_state_actions, self.next_state_depths)
+                self.action = self.dqn.select_eval_action(self.next_state, self.next_state_depths)
             else:
                 if self.state is not None and self.action is not None and self.state_actions is not None and self.state_depths is not None:
                     self.dqn.memory.push(self.state, self.state_actions, self.state_depths, self.action, self.next_state, self.next_state_actions, self.next_state_depths, self.reward)
                     self.erm.push(self.state, self.state_actions, self.state_depths, self.action, self.next_state, self.next_state_actions, self.next_state_depths, self.reward)
 
-                self.action = self.dqn.select_action(self.next_state, self.next_state_actions, self.next_state_depths)       
+                self.action = self.dqn.select_action(self.next_state, self.next_state_depths)       
                 self.state = self.next_state
                 self.state_actions = self.next_state_actions
                 self.state_depths = self.next_state_depths
@@ -383,6 +394,7 @@ class dqn_controller(Node):
         self.flush_commands = self.flush_steps
         self.zero_commands = 0
         self.flush_imu = 0
+        self.flush_depths = 0
         self.flush_segmentation = 0
 
         #reset counters

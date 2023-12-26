@@ -44,25 +44,25 @@ class DQNNetwork(nn.Module):
             nn.ReLU(),
         )
 
-        self.actions_fc = nn.Sequential(
-            nn.Linear(in_features= history*2, out_features= 128),
-            nn.ReLU(),
-        )
+        # self.actions_fc = nn.Sequential(
+        #     nn.Linear(in_features= history*2, out_features= 128),
+        #     nn.ReLU(),
+        # )
 
         self.fc = nn.Sequential(
-            nn.Linear(in_features= 5 * 5 * 64 + 128 + 128, out_features=256),
+            nn.Linear(in_features= 5 * 5 * 64 + 128 + 0, out_features=256),
             nn.ReLU(),
             nn.Linear(in_features= 256, out_features=n_actions)
         )
 
     # Called with either one element to determine next action, or a batch
     # during optimization.
-    def forward(self, x, a, d):
+    def forward(self, x, d):
         x = self.conv(x)
         x = x.reshape((-1, 5 * 5 * 64))
-        a = self.actions_fc(a)
+        # a = self.actions_fc(a)
         d = self.depth_fc(d)
-        x = torch.cat((x, a, d), dim= 1)
+        x = torch.cat((x, d), dim= 1)
         x = self.fc(x)
         return x    
     
@@ -87,7 +87,7 @@ class DQN:
         self.memory = ReplayMemory(self.MEMORY_SIZE)
         self.steps_done = 0
         
-    def select_action(self, s, a, d):
+    def select_action(self, s, d):
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
             math.exp(-1. * self.steps_done / self.EPS_DECAY)
@@ -97,13 +97,13 @@ class DQN:
                 # t.max(1) will return the largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
-                return self.policy_net(s, a, d).max(1)[1].view(1, 1)
+                return self.policy_net(s, d).max(1)[1].view(1, 1)
         else:
             return torch.tensor([[int(np.random.randint(0,self.n_actions))]], device=self.device, dtype=torch.long)
     
-    def select_eval_action(self, s, a, d):
+    def select_eval_action(self, s, d):
         with torch.no_grad():
-            return self.target_net(s, a, d).max(1)[1].view(1, 1)
+            return self.target_net(s, d).max(1)[1].view(1, 1)
 
     def optimize(self):
         if len(self.memory) < self.BATCH_SIZE:
@@ -114,13 +114,13 @@ class DQN:
                                         batch.next_state)), device=self.device, dtype=torch.bool)
         non_final_next_states = torch.cat([s for s in batch.next_state
                                                     if s is not None])
-        non_final_next_state_actions = torch.cat([s for s in batch.next_state_actions
-                                            if s is not None])
+        # non_final_next_state_actions = torch.cat([s for s in batch.next_state_actions
+        #                                     if s is not None])
         non_final_next_state_depths = torch.cat([s for s in batch.next_state_depths
                                             if s is not None])
         
         state_batch = torch.cat(batch.state) #S
-        state_actions_batch = torch.cat(batch.state_actions) 
+        # state_actions_batch = torch.cat(batch.state_actions) 
         state_depths_batch = torch.cat(batch.state_depths)
         action_batch = torch.cat(batch.action) #A
         reward_batch = torch.cat(batch.reward) #R
@@ -128,7 +128,7 @@ class DQN:
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
-        state_action_values = self.policy_net(state_batch, state_actions_batch, state_depths_batch).gather(1, action_batch) #Qp(S_t,A)
+        state_action_values = self.policy_net(state_batch, state_depths_batch).gather(1, action_batch) #Qp(S_t,A)
 
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based
@@ -138,7 +138,7 @@ class DQN:
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
         with torch.no_grad():
             #DQN
-            next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_actions, non_final_next_state_depths).max(1)[0] #max_a Qt(S_t+1, a)
+            next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).max(1)[0] #max_a Qt(S_t+1, a)
 
             #DDQN
             # self.target_net(non_final_next_states, non_final_next_state_actions).gather(1, self.policy_net(non_final_next_states, non_final_next_state_actions).argmax(1).reshape(-1,1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
