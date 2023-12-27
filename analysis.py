@@ -81,9 +81,9 @@ def plot_trajectory(file, target):
     plt.show()
 
 
-experiment = 6
+experiment = 0
 episode = 1
-file = './experiments/{}/trajectories/episode_{}.npy'.format(experiment, str(episode).zfill(5))
+file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
 episodic_returns(experiment)

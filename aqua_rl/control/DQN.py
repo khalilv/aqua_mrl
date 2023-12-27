@@ -3,12 +3,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import random
-from collections import namedtuple, deque
 import math 
 import numpy as np 
+from collections import namedtuple, deque
 
 Transition = namedtuple('Transition',
-                        ('state', 'state_actions', 'state_depths', 'action', 'next_state', 'next_state_actions', 'next_state_depths', 'reward'))
+                        ('state', 'state_depths', 'action', 'next_state', 'next_state_depths', 'reward'))
 
 class ReplayMemory(object):
 
@@ -31,40 +31,36 @@ class DQNNetwork(nn.Module):
     def __init__(self, history, n_actions):
         super(DQNNetwork, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=history, out_channels=32, kernel_size=5, stride=2),
+            nn.Conv2d(in_channels=history, out_channels=32, kernel_size=5, stride=3),
             nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=2, stride=1),
             nn.ReLU(),
         )
 
         self.depth_fc = nn.Sequential(
-            nn.Linear(in_features= history, out_features= 128),
+            nn.Linear(in_features= history, out_features= 256),
+            nn.ReLU(),
+            nn.Linear(in_features= 256, out_features= 128),
             nn.ReLU(),
         )
 
-        # self.actions_fc = nn.Sequential(
-        #     nn.Linear(in_features= history*2, out_features= 128),
-        #     nn.ReLU(),
-        # )
-
         self.fc = nn.Sequential(
-            nn.Linear(in_features= 5 * 5 * 64 + 128 + 0, out_features=256),
+            nn.Linear(in_features= 3 * 3 * 64 + 128, out_features=256),
             nn.ReLU(),
             nn.Linear(in_features= 256, out_features=n_actions)
         )
 
     # Called with either one element to determine next action, or a batch
     # during optimization.
-    def forward(self, x, d):
-        x = self.conv(x)
-        x = x.reshape((-1, 5 * 5 * 64))
-        # a = self.actions_fc(a)
+    def forward(self, s, d):
+        s = self.conv(s)
+        s = s.reshape((-1, 3 * 3 * 64))
         d = self.depth_fc(d)
-        x = torch.cat((x, d), dim= 1)
-        x = self.fc(x)
-        return x    
+        sd = torch.cat((s, d), dim= 1)
+        action = self.fc(sd)
+        return action   
     
 class DQN:
 
@@ -114,14 +110,11 @@ class DQN:
                                         batch.next_state)), device=self.device, dtype=torch.bool)
         non_final_next_states = torch.cat([s for s in batch.next_state
                                                     if s is not None])
-        # non_final_next_state_actions = torch.cat([s for s in batch.next_state_actions
-        #                                     if s is not None])
         non_final_next_state_depths = torch.cat([s for s in batch.next_state_depths
                                             if s is not None])
         
         state_batch = torch.cat(batch.state) #S
-        # state_actions_batch = torch.cat(batch.state_actions) 
-        state_depths_batch = torch.cat(batch.state_depths)
+        state_depths_batch = torch.cat(batch.state_depths) #S
         action_batch = torch.cat(batch.action) #A
         reward_batch = torch.cat(batch.reward) #R
 

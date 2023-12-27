@@ -18,14 +18,14 @@ empty_state_max_ = 10
 depth_range_ = [-6, -14.5]
 starting_line_ = -72
 finish_line_ = 70
-# max_duration_ = 20
+max_duration_ = 750
 
 #reward hyperparams
-target_depth_ = 11
-goal_reached_reward_ = 10
+target_depth_ = -10
+goal_reached_reward_ = 0
 goal_not_reached_reward_ = -10
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 6
+experiment_number_ = 0
 train_for_ = 10

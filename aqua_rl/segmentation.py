@@ -3,10 +3,11 @@ import cv2
 import cv_bridge
 from sensor_msgs.msg import CompressedImage
 from rclpy.node import Node
-import numpy as np
 from aqua_rl.DeepLabv3.deeplabv3 import DeepLabv3
+from aqua_rl import hyperparams 
+import numpy as np
 import time
-from std_msgs.msg import UInt8MultiArray, Float32
+from std_msgs.msg import UInt8MultiArray
 import os
 from aqua_rl import hyperparams
 from aqua_rl.helpers import reward_calculation, define_template
@@ -17,16 +18,12 @@ class segmentation(Node):
         super().__init__('segmentation')
         self.queue_size = hyperparams.queue_size_
         self.img_size = hyperparams.img_size_
-        self.target_depth = hyperparams.target_depth_
-
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
             '/camera/back/image_raw/compressed',
             self.camera_callback,
             self.queue_size)
         self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/segmentation', self.queue_size)
-        self.reward_publisher = self.create_publisher(Float32, '/a13/reward', self.queue_size)
-        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
         self.seg_map = UInt8MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
         self.model = DeepLabv3('src/aqua_rl/segmentation_module/models/deeplabv3_mobilenetv3_ropev2/best.pt')
@@ -39,17 +36,11 @@ class segmentation(Node):
         #measuring publish frequency
         self.t0 = 0
 
-        #measured relative depth
-        self.relative_depth = None
-
         #template for reward
         self.template = define_template(self.img_size)
 
         cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
         print('Initialized: segmentation module')
-
-    def depth_callback(self, depth):
-        self.relative_depth = depth.data - self.target_depth
 
     def camera_callback(self, msg):
 
@@ -66,8 +57,6 @@ class segmentation(Node):
         pred = pred.astype(np.uint8)
         pred = cv2.resize(pred, self.img_size)
 
-        self.publish_reward(pred)
-
         #publish state
         self.seg_map.data = pred.flatten().tolist()
         self.segmentation_publisher.publish(self.seg_map)
@@ -79,14 +68,6 @@ class segmentation(Node):
         print('Publishing Frequency: ', (t1 - self.t0))
         self.t0 = t1
         return
-    
-    def publish_reward(self, seg_map):
-        if self.relative_depth is not None:
-            r = reward_calculation(seg_map, self.relative_depth, self.template)
-            reward = Float32()
-            reward.data = r
-            self.reward_publisher.publish(reward)
-            return
         
 def main(args=None):
     rclpy.init(args=args)

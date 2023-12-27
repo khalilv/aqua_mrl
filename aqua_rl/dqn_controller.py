@@ -2,6 +2,7 @@ import rclpy
 import torch
 import numpy as np 
 import os
+import subprocess
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
 from ir_aquasim_interfaces.srv import SetPosition
@@ -12,7 +13,6 @@ from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
 from aqua_rl.helpers import define_template, reward_calculation
 from aqua_rl import hyperparams
-import subprocess
 
 class dqn_controller(Node):
     def __init__(self):
@@ -34,6 +34,7 @@ class dqn_controller(Node):
         self.start_line_x = hyperparams.starting_line_
         self.load_erm = hyperparams.load_erm_ 
         self.experiment_number = hyperparams.experiment_number_
+        self.max_duration = hyperparams.max_duration_
         self.train_for = hyperparams.train_for_
         # self.max_duration = hyperparams.max_duration_
 
@@ -62,7 +63,6 @@ class dqn_controller(Node):
 
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
         self.measured_roll_angle = 0.0
-
         self.relative_depth = None
 
         #dqn controller for yaw and pitch 
@@ -71,9 +71,7 @@ class dqn_controller(Node):
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
         self.state = None
         self.next_state = None
-        self.state_actions = None
         self.state_depths = None
-        self.next_state_actions = None
         self.next_state_depths = None
         self.action = None
         self.reward = None
@@ -92,7 +90,7 @@ class dqn_controller(Node):
         
         #stopping conditions
         self.empty_state_counter = 0
-        # self.duration_counter = 0
+        self.duration_counter = 0
 
         self.root_path = 'src/aqua_rl/experiments/{}'.format(str(self.experiment_number))
         if os.path.exists(self.root_path):
@@ -165,11 +163,11 @@ class dqn_controller(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = True
-        if imu.x < self.start_line_x:
-            print('Drifted behind starting position')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
+        # if imu.x < self.start_line_x:
+        #     print('Drifted behind starting position')
+        #     self.flush_commands = 0
+        #     self.finished = True
+        #     self.complete = False
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -240,8 +238,7 @@ class dqn_controller(Node):
             self.depth_history.pop(0)
             self.depth_history.append(self.relative_depth)
             ns = np.array(self.image_history)
-            nsa = np.array(self.action_history).flatten()
-            nsd = np.array(self.depth_history).flatten()
+            nsd = np.array(self.depth_history)
             
             #check for empty input from vision module
             if ns.sum() == 0:
@@ -249,24 +246,23 @@ class dqn_controller(Node):
             else:
                 self.empty_state_counter = 0
             
-            #if nothing has been detected in empty_state_max frames then reset
-            if self.empty_state_counter >= self.empty_state_max:
-                print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
-                self.flush_commands = 0
-                self.finished = True
-                self.complete = False
-                return
-
-            # self.duration_counter += 1
-            # if self.duration_counter > self.max_duration:
-            #     print("Reached max duration")
+            # #if nothing has been detected in empty_state_max frames then reset
+            # if self.empty_state_counter >= self.empty_state_max:
+            #     print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
             #     self.flush_commands = 0
             #     self.finished = True
-            #     self.complete = True
+            #     self.complete = False
             #     return
+
+            self.duration_counter += 1
+            if self.duration_counter > self.max_duration:
+                print("Reached max duration")
+                self.flush_commands = 0
+                self.finished = True
+                self.complete = True
+                return
             
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             reward = reward_calculation(seg_map, self.relative_depth, self.template)
             self.episode_rewards.append(reward)
@@ -276,13 +272,12 @@ class dqn_controller(Node):
                 #select greedy action, dont optimize model or append to replay buffer
                 self.action = self.dqn.select_eval_action(self.next_state, self.next_state_depths)
             else:
-                if self.state is not None and self.action is not None and self.state_actions is not None and self.state_depths is not None:
-                    self.dqn.memory.push(self.state, self.state_actions, self.state_depths, self.action, self.next_state, self.next_state_actions, self.next_state_depths, self.reward)
-                    self.erm.push(self.state, self.state_actions, self.state_depths, self.action, self.next_state, self.next_state_actions, self.next_state_depths, self.reward)
+                if self.state is not None and self.action is not None and self.state_depths is not None:
+                    self.dqn.memory.push(self.state, self.state_depths, self.action, self.next_state, self.next_state_depths, self.reward)
+                    self.erm.push(self.state, self.state_depths, self.action, self.next_state, self.next_state_depths, self.reward)
 
                 self.action = self.dqn.select_action(self.next_state, self.next_state_depths)       
                 self.state = self.next_state
-                self.state_actions = self.next_state_actions
                 self.state_depths = self.next_state_depths
 
                 # Perform one step of the optimization (on the policy network)
@@ -319,9 +314,9 @@ class dqn_controller(Node):
         self.episode_rewards = np.array(self.episode_rewards)
         print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
 
-        if self.state is not None and self.action is not None and self.state_actions is not None and self.state_depths is not None and not self.evaluate:
-            self.dqn.memory.push(self.state, self.state_actions, self.state_depths, self.action, None, None, None, torch.tensor([reward], device=self.dqn.device))
-            self.erm.push(self.state, self.state_actions, self.state_depths, self.action, None, None, None, torch.tensor([reward], device=self.dqn.device))
+        if self.state is not None and self.state_depths is not None and not self.evaluate:
+            self.dqn.memory.push(self.state, self.state_depths, self.action, None, None, torch.tensor([reward], device=self.dqn.device))
+            self.erm.push(self.state, self.state_depths, self.action, None, None, torch.tensor([reward], device=self.dqn.device))
 
         
         if self.episode == self.stop_episode:
@@ -383,7 +378,6 @@ class dqn_controller(Node):
         
         #reset state and history queues
         self.state = None
-        self.state_actions = None
         self.state_depths = None
         self.action = None
         self.image_history = []
@@ -399,7 +393,7 @@ class dqn_controller(Node):
 
         #reset counters
         self.empty_state_counter = 0
-        # self.duration_counter = 0
+        self.duration_counter = 0
 
         #reset end conditions 
         self.finished = False
