@@ -29,3 +29,7 @@ goal_not_reached_reward_ = -10
 load_erm_ = True
 experiment_number_ = 0
 train_for_ = 10
+
+#eval hyperparams
+eval_episode_ = 10
+eval_for_ = 10

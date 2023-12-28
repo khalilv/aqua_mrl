@@ -36,7 +36,6 @@ class dqn_controller(Node):
         self.experiment_number = hyperparams.experiment_number_
         self.max_duration = hyperparams.max_duration_
         self.train_for = hyperparams.train_for_
-        # self.max_duration = hyperparams.max_duration_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)

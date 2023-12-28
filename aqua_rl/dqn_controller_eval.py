@@ -27,20 +27,14 @@ class dqn_controller_eval(Node):
         self.pitch_action_space = hyperparams.pitch_action_space_
         self.img_size = hyperparams.img_size_
         self.empty_state_max = hyperparams.empty_state_max_
-        self.checkpoint_experiment = hyperparams.checkpoint_experiment_
         self.depth_range = hyperparams.depth_range_
         self.target_depth = hyperparams.target_depth_
-        self.template_width = hyperparams.template_width_
         self.finish_line_x = hyperparams.finish_line_
         self.start_line_x = hyperparams.starting_line_
-        self.alpha = hyperparams.alpha_
-        self.beta = hyperparams.beta_
-
-        #episode to load weights from
-        self.checkpoint_episode = 414
-
-        #number of eval episodes 
-        self.num_eval_episodes = 5
+        self.experiment_number = hyperparams.experiment_number_
+        self.max_duration = hyperparams.max_duration_
+        self.eval_episode = hyperparams.eval_episode_
+        self.eval_for = hyperparams.eval_for_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -79,13 +73,14 @@ class dqn_controller_eval(Node):
         self.episode_rewards = []
 
         #target for reward
-        self.template = define_template(self.img_size, self.template_width)
+        self.template = define_template(self.img_size)
 
         #stopping condition for empty vision input
         self.empty_state_counter = 0
+        self.duration_counter = 0
 
-        self.checkpoint_path = 'src/aqua_rl/checkpoints/dqn/{}/episode_{}.pt'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
-        self.save_path = 'src/aqua_rl/evaluations/dqn/{}_episode_{}/'.format(str(self.checkpoint_experiment), str(self.checkpoint_episode).zfill(5))
+        self.checkpoint_path = 'src/aqua_rl/experiments/{}/weights/episode_{}.pt'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
+        self.save_path = 'src/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
         checkpoint = torch.load(self.checkpoint_path, map_location=self.dqn.device)
@@ -93,8 +88,8 @@ class dqn_controller_eval(Node):
         self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
         self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.dqn.steps_done = checkpoint['training_steps']
-        self.eval_episode = 0
-        print('Weights loaded from episode: ', self.checkpoint_episode, ', training steps completed: ', self.dqn.steps_done)
+        self.episode = 0
+        print('Weights loaded from episode: ', self.eval_episode, ', training steps completed: ', self.dqn.steps_done)
 
         #initialize command
         self.command = Command()
@@ -130,11 +125,11 @@ class dqn_controller_eval(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = True
-        if imu.x < self.start_line_x:
-            print('Drifted behind starting position')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
+        # if imu.x < self.start_line_x:
+        #     print('Drifted behind starting position')
+        #     self.flush_commands = 0
+        #     self.finished = True
+        #     self.complete = False
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -195,7 +190,7 @@ class dqn_controller_eval(Node):
             self.depth_history.pop(0)
             self.depth_history.append(self.relative_depth)
             s = np.array(self.image_history)
-            si = np.hstack((np.array(self.action_history), np.expand_dims(np.array(self.depth_history), axis= 1))).flatten()
+            sd = np.array(self.depth_history)
             
             #check for empty input from vision module
             if s.sum() == 0:
@@ -203,18 +198,26 @@ class dqn_controller_eval(Node):
             else:
                 self.empty_state_counter = 0
             
-            #if nothing has been detected in empty_state_max frames then reset
-            if self.empty_state_counter >= self.empty_state_max:
-                print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
+            # #if nothing has been detected in empty_state_max frames then reset
+            # if self.empty_state_counter >= self.empty_state_max:
+            #     print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
+            #     self.flush_commands = 0
+            #     self.finished = True
+            #     self.complete = False
+            #     return
+                
+            self.duration_counter += 1
+            if self.duration_counter > self.max_duration:
+                print("Reached max duration")
                 self.flush_commands = 0
                 self.finished = True
-                self.complete = False
+                self.complete = True
                 return
             
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            state_actions = torch.tensor(si, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            state_actions = torch.tensor(sd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
 
-            reward = reward_calculation(seg_map, self.relative_depth, self.template, self.alpha, self.beta)
+            reward = reward_calculation(seg_map, self.relative_depth, self.template)
             self.episode_rewards.append(reward)
             action = self.dqn.select_eval_action(state, state_actions)
 
@@ -242,11 +245,11 @@ class dqn_controller_eval(Node):
         print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
 
         print('Saving trajectory')
-        with open(self.save_path + '/episode_{}.npy'.format(str(self.eval_episode).zfill(5)), 'wb') as f:
+        with open(self.save_path + '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
             np.save(f, self.episode_rewards)
             np.save(f, np.array(self.trajectory))
         
-        if self.eval_episode < self.num_eval_episodes:
+        if self.episode < self.eval_for:
             self.reset()
         else:
             rclpy.shutdown()
@@ -278,7 +281,7 @@ class dqn_controller_eval(Node):
 
         #increment episode and reset rewards
         self.episode_rewards = []
-        self.eval_episode += 1
+        self.episode += 1
         
         #reset trajectory
         self.trajectory = []
@@ -296,6 +299,7 @@ class dqn_controller_eval(Node):
 
         #reset counters
         self.empty_state_counter = 0
+        self.duration_counter = 0
 
         #reset end conditions 
         self.finished = False
