@@ -10,7 +10,6 @@ import time
 from std_msgs.msg import UInt8MultiArray
 import os
 from aqua_rl import hyperparams
-from aqua_rl.helpers import reward_calculation, define_template
 
 class segmentation(Node):
 
@@ -35,9 +34,6 @@ class segmentation(Node):
 
         #measuring publish frequency
         self.t0 = 0
-
-        #template for reward
-        self.template = define_template(self.img_size)
 
         cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
         print('Initialized: segmentation module')

@@ -32,7 +32,6 @@ class dqn_controller_eval(Node):
         self.finish_line_x = hyperparams.finish_line_
         self.start_line_x = hyperparams.starting_line_
         self.experiment_number = hyperparams.experiment_number_
-        self.max_duration = hyperparams.max_duration_
         self.eval_episode = hyperparams.eval_episode_
         self.eval_for = hyperparams.eval_for_
 
@@ -59,7 +58,6 @@ class dqn_controller_eval(Node):
 
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
         self.measured_roll_angle = 0.0
-
         self.relative_depth = None
         
         #dqn controller for yaw and pitch
@@ -67,9 +65,7 @@ class dqn_controller_eval(Node):
         self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
         self.dqn = DQN(int(self.yaw_action_space * self.pitch_action_space), self.history_size) 
         self.image_history = []
-        self.action_history = []
         self.depth_history = []
-
         self.episode_rewards = []
 
         #target for reward
@@ -77,7 +73,6 @@ class dqn_controller_eval(Node):
 
         #stopping condition for empty vision input
         self.empty_state_counter = 0
-        self.duration_counter = 0
 
         self.checkpoint_path = 'src/aqua_rl/experiments/{}/weights/episode_{}.pt'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
         self.save_path = 'src/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
@@ -125,11 +120,11 @@ class dqn_controller_eval(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = True
-        # if imu.x < self.start_line_x:
-        #     print('Drifted behind starting position')
-        #     self.flush_commands = 0
-        #     self.finished = True
-        #     self.complete = False
+        if imu.x < self.start_line_x:
+            print('Drifted behind starting position')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -183,7 +178,6 @@ class dqn_controller_eval(Node):
         if len(self.image_history) < self.history_size:
             self.depth_history.append(self.relative_depth)
             self.image_history.append(seg_map)
-            self.action_history.append([0.0,0.0])
         else:
             self.image_history.pop(0)
             self.image_history.append(seg_map)
@@ -198,35 +192,24 @@ class dqn_controller_eval(Node):
             else:
                 self.empty_state_counter = 0
             
-            # #if nothing has been detected in empty_state_max frames then reset
-            # if self.empty_state_counter >= self.empty_state_max:
-            #     print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
-            #     self.flush_commands = 0
-            #     self.finished = True
-            #     self.complete = False
-            #     return
-                
-            self.duration_counter += 1
-            if self.duration_counter > self.max_duration:
-                print("Reached max duration")
+            #if nothing has been detected in empty_state_max frames then reset
+            if self.empty_state_counter >= self.empty_state_max:
+                print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
                 self.flush_commands = 0
                 self.finished = True
-                self.complete = True
+                self.complete = False
                 return
             
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            state_actions = torch.tensor(sd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            state_depths = torch.tensor(sd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
 
             reward = reward_calculation(seg_map, self.relative_depth, self.template)
             self.episode_rewards.append(reward)
-            action = self.dqn.select_eval_action(state, state_actions)
+            action = self.dqn.select_eval_action(state, state_depths)
 
             action_idx = action.detach().cpu().numpy()[0][0]
             self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
-            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]
-            self.action_history.pop(0)
-            self.action_history.append([self.command.pitch, self.command.yaw])
-            
+            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
             self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
             self.command_publisher.publish(self.command)
@@ -263,7 +246,7 @@ class dqn_controller_eval(Node):
         #starting position
         starting_pose.position.x = 70.0
         starting_pose.position.z = -0.3
-        starting_pose.position.y = -12.0
+        starting_pose.position.y = self.target_depth
 
         #starting orientation
         starting_pose.orientation.x = 0.0
@@ -288,7 +271,6 @@ class dqn_controller_eval(Node):
         
         #reset history queue
         self.image_history = []
-        self.action_history = []
         self.depth_history = []
 
         #reset flush queues 
@@ -299,7 +281,6 @@ class dqn_controller_eval(Node):
 
         #reset counters
         self.empty_state_counter = 0
-        self.duration_counter = 0
 
         #reset end conditions 
         self.finished = False

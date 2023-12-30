@@ -13,6 +13,7 @@ from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
 from aqua_rl.helpers import define_template, reward_calculation
 from aqua_rl import hyperparams
+from torch.utils.tensorboard import SummaryWriter 
 
 class dqn_controller(Node):
     def __init__(self):
@@ -34,7 +35,6 @@ class dqn_controller(Node):
         self.start_line_x = hyperparams.starting_line_
         self.load_erm = hyperparams.load_erm_ 
         self.experiment_number = hyperparams.experiment_number_
-        self.max_duration = hyperparams.max_duration_
         self.train_for = hyperparams.train_for_
 
         #subscribers and publishers
@@ -73,7 +73,6 @@ class dqn_controller(Node):
         self.action = None
         self.reward = None
         self.image_history = []
-        self.action_history = []
         self.depth_history = []
         self.episode_rewards = []
         self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
@@ -87,20 +86,20 @@ class dqn_controller(Node):
         
         #stopping conditions
         self.empty_state_counter = 0
-        self.duration_counter = 0
 
         self.root_path = 'src/aqua_rl/experiments/{}'.format(str(self.experiment_number))
         if os.path.exists(self.root_path):
             self.save_path = os.path.join(self.root_path, 'weights')
             self.save_memory_path = os.path.join(self.root_path, 'erm')
             self.save_traj_path = os.path.join(self.root_path, 'trajectories')
+            self.writer = SummaryWriter(os.path.join(self.root_path, 'logs'))
             last_checkpoint = max(sorted(os.listdir(self.save_path)))
             checkpoint = torch.load(os.path.join(self.save_path, last_checkpoint), map_location=self.dqn.device)
             self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
             self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
             self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.dqn.steps_done = checkpoint['training_steps']
-            
+
             if self.load_erm:
                 print('Loading ERM from previous experience. Note this may take time')
                 t0 = time()
@@ -123,9 +122,11 @@ class dqn_controller(Node):
             os.mkdir(os.path.join(self.root_path, 'weights'))
             os.mkdir(os.path.join(self.root_path, 'erm'))
             os.mkdir(os.path.join(self.root_path, 'trajectories'))
+            os.mkdir(os.path.join(self.root_path, 'logs'))
             self.save_path = os.path.join(self.root_path, 'weights')
             self.save_memory_path = os.path.join(self.root_path, 'erm')
             self.save_traj_path = os.path.join(self.root_path, 'trajectories')
+            self.writer = SummaryWriter(os.path.join(self.root_path, 'logs'))
             self.episode = 0
             self.stop_episode = self.episode + self.train_for
             print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
@@ -161,11 +162,11 @@ class dqn_controller(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = True
-        # if imu.x < self.start_line_x:
-        #     print('Drifted behind starting position')
-        #     self.flush_commands = 0
-        #     self.finished = True
-        #     self.complete = False
+        if imu.x < self.start_line_x:
+            print('Drifted behind starting position')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -219,7 +220,6 @@ class dqn_controller(Node):
         if len(self.image_history) < self.history_size:
             self.depth_history.append(self.relative_depth)
             self.image_history.append(seg_map)
-            self.action_history.append([0.0,0.0])
         else:
             self.image_history.pop(0)
             self.image_history.append(seg_map)
@@ -234,27 +234,19 @@ class dqn_controller(Node):
             else:
                 self.empty_state_counter = 0
             
-            # #if nothing has been detected in empty_state_max frames then reset
-            # if self.empty_state_counter >= self.empty_state_max:
-            #     print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
-            #     self.flush_commands = 0
-            #     self.finished = True
-            #     self.complete = False
-            #     return
-
-            self.duration_counter += 1
-            if self.duration_counter > self.max_duration:
-                print("Reached max duration")
+            #if nothing has been detected in empty_state_max frames then reset
+            if self.empty_state_counter >= self.empty_state_max:
+                print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
                 self.flush_commands = 0
                 self.finished = True
-                self.complete = True
+                self.complete = False
                 return
-            
+           
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             reward = reward_calculation(seg_map, self.relative_depth, self.template)
             self.episode_rewards.append(reward)
-            self.reward = torch.tensor([reward], device=self.dqn.device)
+            self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
 
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
@@ -269,28 +261,28 @@ class dqn_controller(Node):
                 self.state_depths = self.next_state_depths
 
                 # Perform one step of the optimization (on the policy network)
-                self.dqn.optimize()
-                
-                # Soft update of the target network's weights
-                # θ′ ← τ θ + (1 −τ )θ′
-                target_net_state_dict = self.dqn.target_net.state_dict()
-                policy_net_state_dict = self.dqn.policy_net.state_dict()
-                for key in policy_net_state_dict:
-                    target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
-                self.dqn.target_net.load_state_dict(target_net_state_dict)
-            
+                if self.dqn.steps_done % 5 == 0:
+                    loss = self.dqn.optimize()
+                    if loss is not None:        
+                        self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
+
             action_idx = self.action.detach().cpu().numpy()[0][0]
             self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
-            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]
-            self.action_history.pop(0)
-            self.action_history.append([self.command.yaw, self.command.pitch])
-            
+            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
             self.command.speed = hyperparams.speed_ #fixed speed
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
             self.command_publisher.publish(self.command)
         return 
         
     def finish(self):
+         # Soft update of the target network's weights
+        # θ′ ← τ θ + (1 −τ )θ′
+        target_net_state_dict = self.dqn.target_net.state_dict()
+        policy_net_state_dict = self.dqn.policy_net.state_dict()
+        for key in policy_net_state_dict:
+            target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
+        self.dqn.target_net.load_state_dict(target_net_state_dict)
+                
         if self.complete:
             print('Goal reached')
             reward = hyperparams.goal_reached_reward_
@@ -301,12 +293,12 @@ class dqn_controller(Node):
 
         self.episode_rewards = np.array(self.episode_rewards)
         print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
+        self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
 
         if self.state is not None and self.state_depths is not None and not self.evaluate:
-            self.dqn.memory.push(self.state, self.state_depths, self.action, None, None, torch.tensor([reward], device=self.dqn.device))
-            self.erm.push(self.state, self.state_depths, self.action, None, None, torch.tensor([reward], device=self.dqn.device))
+            self.dqn.memory.push(self.state, self.state_depths, self.action, None, None, self.reward)
+            self.erm.push(self.state, self.state_depths, self.action, None, None, self.reward)
 
-        
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
             torch.save({
@@ -337,7 +329,7 @@ class dqn_controller(Node):
         #starting position
         starting_pose.position.x = 70.0
         starting_pose.position.z = -0.3                                             
-        starting_pose.position.y = -12.0
+        starting_pose.position.y = self.target_depth
         
         #starting orientation
         starting_pose.orientation.x = 0.0
@@ -366,10 +358,12 @@ class dqn_controller(Node):
         
         #reset state and history queues
         self.state = None
+        self.next_state = None
         self.state_depths = None
+        self.next_state_depths = None
         self.action = None
+        self.reward = None
         self.image_history = []
-        self.action_history = []
         self.depth_history = []
 
         #reset flush queues 
@@ -380,8 +374,7 @@ class dqn_controller(Node):
 
         #reset counters
         self.empty_state_counter = 0
-        self.duration_counter = 0
-
+        
         #reset end conditions 
         self.finished = False
         self.complete = False

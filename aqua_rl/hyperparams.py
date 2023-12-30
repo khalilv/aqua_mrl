@@ -6,9 +6,9 @@ img_size_ = (32,32)
 
 #control hyperparams
 roll_gains_ = [0.25, 0.0, 0.75]
-history_size_ = 10
+history_size_ = 20
 speed_ = 0.25
-pitch_limit_ = 0.0075
+pitch_limit_ = 0.01
 yaw_limit_ = 0.25
 yaw_action_space_ = 3
 pitch_action_space_ = 3
@@ -18,11 +18,10 @@ empty_state_max_ = 10
 depth_range_ = [-6, -14.5]
 starting_line_ = -72
 finish_line_ = 70
-max_duration_ = 750
 
 #reward hyperparams
-target_depth_ = -10
-goal_reached_reward_ = 0
+target_depth_ = -10.0
+goal_reached_reward_ = 100
 goal_not_reached_reward_ = -10
 
 #training hyperparams

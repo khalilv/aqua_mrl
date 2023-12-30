@@ -12,10 +12,9 @@ def reward_calculation(seg_map, relative_depth, template):
     union = np.logical_or(seg_map, template)
     iou = np.sum(intersection) / np.sum(union)
 
-    if np.abs(relative_depth) < 1:
-        r = 1
+    if np.abs(relative_depth) < 2:
+        r = iou - 0.02
     else: 
-        r = -1
-
+        r = -1.0
     return r
         

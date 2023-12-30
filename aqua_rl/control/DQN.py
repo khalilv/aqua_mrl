@@ -40,9 +40,7 @@ class DQNNetwork(nn.Module):
         )
 
         self.depth_fc = nn.Sequential(
-            nn.Linear(in_features= history, out_features= 256),
-            nn.ReLU(),
-            nn.Linear(in_features= 256, out_features= 128),
+            nn.Linear(in_features= history, out_features= 128),
             nn.ReLU(),
         )
 
@@ -58,21 +56,21 @@ class DQNNetwork(nn.Module):
         s = self.conv(s)
         s = s.reshape((-1, 3 * 3 * 64))
         d = self.depth_fc(d)
-        sd = torch.cat((s, d), dim= 1)
-        action = self.fc(sd)
-        return action   
+        s = torch.cat((s, d), dim= 1)
+        s = self.fc(s)
+        return s  
     
 class DQN:
 
     def __init__(self, n_actions, history_size) -> None:
-        self.BATCH_SIZE = 32
+        self.BATCH_SIZE = 128
         self.GAMMA = 0.99
         self.EPS_START = 0.9
         self.EPS_END = 0.1
         self.EPS_DECAY = 100000
-        self.TAU = 0.002
-        LR = 1e-4
-        self.MEMORY_SIZE = 100000
+        self.TAU = 0.01
+        LR = 1e-3
+        self.MEMORY_SIZE = 80000
         self.n_actions = n_actions
         self.history_size = history_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
