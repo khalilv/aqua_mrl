@@ -8,7 +8,7 @@ img_size_ = (32,32)
 roll_gains_ = [0.25, 0.0, 0.75]
 history_size_ = 20
 speed_ = 0.25
-pitch_limit_ = 0.01
+pitch_limit_ = 0.008
 yaw_limit_ = 0.25
 yaw_action_space_ = 3
 pitch_action_space_ = 3
@@ -26,7 +26,7 @@ goal_not_reached_reward_ = -10
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 0
+experiment_number_ = 15
 train_for_ = 10
 
 #eval hyperparams

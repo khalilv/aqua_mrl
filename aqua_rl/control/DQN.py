@@ -68,9 +68,9 @@ class DQN:
         self.EPS_START = 0.9
         self.EPS_END = 0.1
         self.EPS_DECAY = 100000
-        self.TAU = 0.01
-        LR = 1e-3
-        self.MEMORY_SIZE = 80000
+        self.TAU = 0.001
+        LR = 1e-4
+        self.MEMORY_SIZE = 60000
         self.n_actions = n_actions
         self.history_size = history_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

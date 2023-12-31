@@ -261,10 +261,17 @@ class dqn_controller(Node):
                 self.state_depths = self.next_state_depths
 
                 # Perform one step of the optimization (on the policy network)
-                if self.dqn.steps_done % 5 == 0:
+                if self.dqn.steps_done % 1 == 0:
                     loss = self.dqn.optimize()
                     if loss is not None:        
                         self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
+                    # Soft update of the target network's weights
+                    # θ′ ← τ θ + (1 −τ )θ′
+                    target_net_state_dict = self.dqn.target_net.state_dict()
+                    policy_net_state_dict = self.dqn.policy_net.state_dict()
+                    for key in policy_net_state_dict:
+                        target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
+                    self.dqn.target_net.load_state_dict(target_net_state_dict)
 
             action_idx = self.action.detach().cpu().numpy()[0][0]
             self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
@@ -275,14 +282,7 @@ class dqn_controller(Node):
         return 
         
     def finish(self):
-         # Soft update of the target network's weights
-        # θ′ ← τ θ + (1 −τ )θ′
-        target_net_state_dict = self.dqn.target_net.state_dict()
-        policy_net_state_dict = self.dqn.policy_net.state_dict()
-        for key in policy_net_state_dict:
-            target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
-        self.dqn.target_net.load_state_dict(target_net_state_dict)
-                
+                       
         if self.complete:
             print('Goal reached')
             reward = hyperparams.goal_reached_reward_

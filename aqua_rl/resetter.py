@@ -43,7 +43,7 @@ time.sleep(2)
 print('Calibrating')
 subprocess.run('ros2 service call /a13/system/calibrate std_srvs/srv/Empty', shell=True)
 
-time.sleep(7)
+time.sleep(15)
 print('Switching to the swimming mode')
 subprocess.run('ros2 service call /a13/system/set_mode aqua2_interfaces/srv/SetString "value: swimmode"',
                shell=True)

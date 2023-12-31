@@ -15,6 +15,6 @@ def reward_calculation(seg_map, relative_depth, template):
     if np.abs(relative_depth) < 2:
         r = iou - 0.02
     else: 
-        r = -1.0
+        r = -0.5
     return r
         
