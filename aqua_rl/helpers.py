@@ -13,13 +13,21 @@ def reward_calculation(seg_map, relative_depth, template, thresh):
     iou = np.sum(intersection) / np.sum(union)
     
     #within depth range
-    if np.abs(relative_depth) < 1:
-        #target is in image
-        if np.sum(seg_map) >= thresh:
-            r = iou + 0.05
-        else:
-            r = iou - 0.05
+    if np.abs(relative_depth) < 0.5:
+        depth_reward = 0.2
+    elif np.abs(relative_depth) < 1:
+        depth_reward = 0.1
+    elif np.abs(relative_depth) < 2:
+        depth_reward = -0.1
     else: 
-        r = -0.5
-    return r
+        depth_reward = -0.2
+
+    #target is in image
+    if np.sum(seg_map) >= thresh:
+        r = iou + 0.2
+    else:
+        r = -0.2
+
+
+    return r + depth_reward
         

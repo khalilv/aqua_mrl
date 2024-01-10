@@ -65,7 +65,7 @@ class DQN:
     def __init__(self, n_actions, history_size) -> None:
         self.BATCH_SIZE = 128
         self.GAMMA = 0.99
-        self.EPS_START = 0.9
+        self.EPS_START = 0.6
         self.EPS_END = 0.1
         self.EPS_DECAY = 100000
         self.TAU = 0.001
@@ -76,7 +76,7 @@ class DQN:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.policy_net = DQNNetwork(self.history_size, self.n_actions).to(self.device)
         self.target_net = DQNNetwork(self.history_size, self.n_actions).to(self.device)
-        self.target_net.load_state_dict(self.target_net.state_dict())
+        self.target_net.load_state_dict(self.policy_net.state_dict())
         self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=LR, amsgrad=True)
         self.memory = ReplayMemory(self.MEMORY_SIZE)
         self.steps_done = 0

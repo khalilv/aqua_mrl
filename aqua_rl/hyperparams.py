@@ -27,9 +27,12 @@ detection_threshold_ = 10
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 15
+experiment_number_ = 16
 train_for_ = 10
 
 #eval hyperparams
 eval_episode_ = 10
 eval_for_ = 10
+
+#dirl
+dirl_weights_ = 'src/aqua_rl/imitation_learning_module/models/best.pt' #set to None if starting from random weights

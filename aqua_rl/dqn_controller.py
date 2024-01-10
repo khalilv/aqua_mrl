@@ -37,7 +37,8 @@ class dqn_controller(Node):
         self.experiment_number = hyperparams.experiment_number_
         self.train_for = hyperparams.train_for_
         self.detection_threshold = hyperparams.detection_threshold_
-
+        self.dirl_weights = hyperparams.dirl_weights_
+        
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
@@ -131,6 +132,11 @@ class dqn_controller(Node):
             self.writer = SummaryWriter(os.path.join(self.root_path, 'logs'))
             self.episode = 0
             self.stop_episode = self.episode + self.train_for
+            if self.dirl_weights is not None:
+                dirl = torch.load(self.dirl_weights, map_location=self.dqn.device)
+                self.dqn.policy_net.load_state_dict(dirl['model_state_dict'], strict=True)
+                self.dqn.target_net.load_state_dict(dirl['model_state_dict'], strict=True)
+                print('Loaded starting point from IL agent')
             print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
         
         #initialize command
@@ -296,6 +302,11 @@ class dqn_controller(Node):
         self.episode_rewards = np.array(self.episode_rewards)
         print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
         self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
+        
+        if self.evaluate:
+            self.writer.add_scalar('Episode Rewards (Eval)', np.sum(self.episode_rewards), self.episode)
+        else:
+            self.writer.add_scalar('Episode Rewards (Train)', np.sum(self.episode_rewards), self.episode)
 
         if self.state is not None and self.state_depths is not None and not self.evaluate:
             self.dqn.memory.push(self.state, self.state_depths, self.action, None, None, self.reward)
