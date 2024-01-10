@@ -10,4 +10,5 @@ checkpoints/
 evaluations/
 trajectories/
 experiments/
+pid_expert/
 

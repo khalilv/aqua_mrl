@@ -34,6 +34,7 @@ class dqn_controller_eval(Node):
         self.experiment_number = hyperparams.experiment_number_
         self.eval_episode = hyperparams.eval_episode_
         self.eval_for = hyperparams.eval_for_
+        self.detection_threshold = hyperparams.detection_threshold_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -203,7 +204,7 @@ class dqn_controller_eval(Node):
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             state_depths = torch.tensor(sd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
 
-            reward = reward_calculation(seg_map, self.relative_depth, self.template)
+            reward = reward_calculation(seg_map, self.relative_depth, self.template, self.detection_threshold)
             self.episode_rewards.append(reward)
             action = self.dqn.select_eval_action(state, state_depths)
 

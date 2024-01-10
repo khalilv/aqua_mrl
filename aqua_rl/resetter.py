@@ -13,7 +13,7 @@ for i in range(len(nodes_list)):
 print('Resetting the simulator')
 time.sleep(20)
 # switch to the unity
-command = 'wmctrl -a Unity'
+command = 'wmctrl -a Coral Reef'
 subprocess.run(command, shell=True)
 time.sleep(2)
 

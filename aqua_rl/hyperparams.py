@@ -23,6 +23,7 @@ finish_line_ = 70
 target_depth_ = -10.0
 goal_reached_reward_ = 100
 goal_not_reached_reward_ = -10
+detection_threshold_ = 10
 
 #training hyperparams
 load_erm_ = True

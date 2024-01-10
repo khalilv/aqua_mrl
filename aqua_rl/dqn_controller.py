@@ -36,6 +36,7 @@ class dqn_controller(Node):
         self.load_erm = hyperparams.load_erm_ 
         self.experiment_number = hyperparams.experiment_number_
         self.train_for = hyperparams.train_for_
+        self.detection_threshold = hyperparams.detection_threshold_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -244,7 +245,7 @@ class dqn_controller(Node):
            
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = reward_calculation(seg_map, self.relative_depth, self.template)
+            reward = reward_calculation(seg_map, self.relative_depth, self.template, self.detection_threshold)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
 

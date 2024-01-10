@@ -1,33 +1,40 @@
 import rclpy
 import cv2
 import cv_bridge
+import time
+import numpy as np
 from sensor_msgs.msg import CompressedImage
 from rclpy.node import Node
-import numpy as np
 from torchvision import models
 from torchvision.models.segmentation.deeplabv3 import DeepLabHead
 from aqua_rl.DeepLabv3.deeplabv3 import DeepLabv3
-import time
 from std_msgs.msg import Float32MultiArray
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
+from aqua_rl import hyperparams
 
 
 class pid_parameters(Node):
 
     def __init__(self):
         super().__init__('pid_parameters')
+        
+        self.queue_size = hyperparams.queue_size_
+        self.img_size = hyperparams.img_size_
+
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
             '/camera/back/image_raw/compressed',
             self.camera_callback,
-            10)
-        self.command_publisher = self.create_publisher(Float32MultiArray, '/pid/parameters', 10)
-        self.command = Float32MultiArray()
+            self.queue_size)
+        self.parameters_publisher = self.create_publisher(Float32MultiArray, '/segmentation/parameters', self.queue_size)
+        self.parameters = Float32MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
-        self.img_size = (300,400)
-        self.model = DeepLabv3('src/aqua_rl/segmentation_module/models/deeplabv3_mobilenetv3/best.pt')
-        self.current_error = 0
+        self.model = DeepLabv3('src/aqua_rl/segmentation_module/models/deeplabv3_mobilenetv3_ropev2/best.pt')
+        self.current_error = 0.0
+
+        #measuring publish frequency
+        self.t0 = 0
 
         #init kalman filter for tracking waypoint
         self.use_kalman = True
@@ -36,29 +43,29 @@ class pid_parameters(Node):
         self.kalman.F = np.array([[1.,1.],[0.,1.]]) #state transition matrix
         self.kalman.H = np.array([[1.,0.]]) #measurement function. only measure position
         self.kalman.P *= np.array([[100.,0.],[0., 1000.]]) #covariance matrix give high uncertainty to unobservable initial velocities
-        self.kalman.R = 7.5 #measurement noise in px
+        self.kalman.R = 1 #measurement noise in px
         self.kalman.Q = Q_discrete_white_noise(dim=2, dt=0.02, var=0.13)
 
         cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
         print('Initialized: PID parameters')
 
     def camera_callback(self, msg):
-        t0 = time.time()
 
         img = np.fromstring(msg.data.tobytes(), np.uint8)
         img = cv2.imdecode(img, cv2.IMREAD_COLOR)
 
         #segment image
         pred = self.model.segment(img)
-        pred = pred.astype(np.uint8) * 255
+        pred = pred.astype(np.uint8)
+        pred = cv2.resize(pred, self.img_size)
 
         #ransac on mask
         try:
-            r, theta, _ = self.ransac(pred, tau = 15, iters = 20)
+            r, theta, _ = self.ransac(pred, tau = 15, iters = 50)
         except AssertionError:
             print('Nothing detected')
-            self.command.data = [-1., -1., -1., -1., -1.] #send stop command as all -1 
-            self.command_publisher.publish(self.command)
+            self.parameters.data = [-1., -1., -1., -1., -1.] #send stop command as all -1 
+            self.parameters_publisher.publish(self.parameters)
             return
         
         #calculate error
@@ -88,31 +95,23 @@ class pid_parameters(Node):
             self.current_error = er
       
         #publish parameter information
-        self.command.data = [self.current_error, r, theta, cx, cy]
-        self.command_publisher.publish(self.command)
+        self.parameters.data = [self.current_error, r, theta, cx, cy]
+        self.parameters_publisher.publish(self.parameters)
 
         #display waypoint and center
         waypoint = self.error_to_boundary_point(self.current_error)   
-        pred = np.stack((pred,)*3, axis=-1)    
-        cv2.circle(pred, (waypoint[0], waypoint[1]), 5, (255,0,0), 2)
-        cv2.circle(pred, (int(cx), int(cy)), 5, (0,0,255), 2)
+        pred = np.stack((pred * 255,)*3, axis=-1)    
+        cv2.circle(pred, (waypoint[0], waypoint[1]), 2, (255,0,0), 2)
+        cv2.circle(pred, (int(cx), int(cy)), 2, (0,0,255), 2)
         cv2.imshow('Segmentation Mask', pred)
         cv2.waitKey(1)
         
         t1 = time.time()
-        print('Processing time: ', (t1 - t0))
+        print('Publishing Frequency: ', (t1 - self.t0))
+        self.t0 = t1
+
         return
    
-    def load_model(self, n_classes):
-        model = models.segmentation.deeplabv3_resnet101(
-            pretrained=True, progress=True)
-        # freeze weights
-        for param in model.parameters():
-            param.requires_grad = False
-        # replace classifier
-        model.classifier = DeepLabHead(2048, num_classes=n_classes)
-        return model
-
     def line_to_error(self, r, theta):
         w = self.img_size[1]
         h = self.img_size[0]
@@ -130,7 +129,7 @@ class pid_parameters(Node):
 
         #bottom border of image
         x = (r - h*np.sin(theta))/np.cos(theta)
-        if x > 0 and x < w:
+        if x >= 0 and x <= w:
             if x < w/2:
                 errors.append(-w/2 - h - x)
             else:
