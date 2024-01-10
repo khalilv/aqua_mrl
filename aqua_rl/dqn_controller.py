@@ -7,7 +7,7 @@ from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
-from std_msgs.msg import UInt8MultiArray
+from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
@@ -46,7 +46,8 @@ class dqn_controller(Node):
             '/segmentation', 
             self.segmentation_callback, 
             self.queue_size)
-        
+        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
+
         #flush queues
         self.flush_steps = self.queue_size + 30
         self.flush_commands = self.flush_steps
@@ -157,7 +158,6 @@ class dqn_controller(Node):
             return
         
         self.measured_roll_angle = self.calculate_roll(imu)
-        self.relative_depth = self.calculate_relative_depth(imu)
 
         if imu.x > self.finish_line_x:
             self.flush_commands = 0
@@ -185,8 +185,9 @@ class dqn_controller(Node):
     def calculate_roll(self, imu):
         return imu.roll
     
-    def calculate_relative_depth(self, imu):
-        return imu.y - self.target_depth
+    def depth_callback(self, depth):
+        self.relative_depth = self.target_depth + depth.data
+        return
 
     def segmentation_callback(self, seg_map):
 

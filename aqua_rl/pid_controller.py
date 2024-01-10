@@ -33,7 +33,7 @@ class pid_controller(Node):
             '/segmentation', 
             self.segmentation_callback, 
             self.queue_size)
-        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, 10)
+        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
 
         #initialize pid controllers
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
@@ -60,7 +60,7 @@ class pid_controller(Node):
         self.state_depths = None
         self.action = None
 
-        self.save_expert_data = False
+        self.save_expert_data = True
         self.expert_dataset_path = 'src/aqua_rl/pid_expert/'
         if not os.path.exists(self.expert_dataset_path):
             os.mkdir(self.expert_dataset_path)
@@ -115,52 +115,52 @@ class pid_controller(Node):
             self.depth_history.pop(0)
             self.depth_history.append(self.relative_depth)
 
-        #ransac on mask
-        try:
-            r, theta, _ = self.ransac(seg_map, tau = 15, iters = 50)
-        except AssertionError:
-            print('Nothing detected')
-            return
-        
-        #calculate error
-        errors = self.line_to_error(r, theta)
-
-        #kalman filter predict
-        self.kalman.predict()
-
-        #select waypoint from candidates. select higher point. 
-        #in horizontal pipe case this may cause switching
-        if np.abs(errors[0]) < np.abs(errors[1]):
-            er = errors[0]
-        else:
-            er = errors[1]
-        
-        if self.use_kalman:
-            self.kalman.update(er) #update kalman filter with measurement
-            self.current_error = self.kalman.x[0] #read updated state   
-        else:
-            self.current_error = er
-        
-        self.state = np.array(self.image_history)
-        self.state_depths = np.array(self.depth_history)
-        self.yaw_action_idx = self.discretize(self.yaw_pid.control(self.current_error), self.yaw_actions)
-        self.pitch_action_idx = self.discretize(self.pitch_pid.control(self.relative_depth), self.pitch_actions)
-        self.action = int(self.pitch_action_idx*self.yaw_action_space) + self.yaw_action_idx
-        if self.save_expert_data:
-            with open(os.path.join(self.expert_dataset_path, 'states') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as s:
-                np.save(s, self.state)
-            with open(os.path.join(self.expert_dataset_path, 'depths') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as d:
-                np.save(d, self.state_depths)
-            with open(os.path.join(self.expert_dataset_path, 'actions') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as a:
-                np.save(a, self.action)
-            self.num_samples += 1
+            #ransac on mask
+            try:
+                r, theta, _ = self.ransac(seg_map, tau = 15, iters = 50)
+            except AssertionError:
+                print('Nothing detected')
+                return
             
-        self.command.speed = 0.25 #fixed speed
-        self.command.yaw = self.yaw_actions[self.yaw_action_idx]
-        self.command.pitch = self.pitch_actions[self.pitch_action_idx]
-        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-        self.command.heave = 0.0
-        self.command_publisher.publish(self.command)
+            #calculate error
+            errors = self.line_to_error(r, theta)
+
+            #kalman filter predict
+            self.kalman.predict()
+
+            #select waypoint from candidates. select higher point. 
+            #in horizontal pipe case this may cause switching
+            if np.abs(errors[0]) < np.abs(errors[1]):
+                er = errors[0]
+            else:
+                er = errors[1]
+            
+            if self.use_kalman:
+                self.kalman.update(er) #update kalman filter with measurement
+                self.current_error = self.kalman.x[0] #read updated state   
+            else:
+                self.current_error = er
+            
+            self.state = np.array(self.image_history)
+            self.state_depths = np.array(self.depth_history)
+            self.yaw_action_idx = self.discretize(self.yaw_pid.control(self.current_error), self.yaw_actions)
+            self.pitch_action_idx = self.discretize(self.pitch_pid.control(self.relative_depth), self.pitch_actions)
+            self.action = int(self.pitch_action_idx*self.yaw_action_space) + self.yaw_action_idx
+            if self.save_expert_data:
+                with open(os.path.join(self.expert_dataset_path, 'states') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as s:
+                    np.save(s, self.state)
+                with open(os.path.join(self.expert_dataset_path, 'depths') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as d:
+                    np.save(d, self.state_depths)
+                with open(os.path.join(self.expert_dataset_path, 'actions') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as a:
+                    np.save(a, self.action)
+                self.num_samples += 1
+                
+            self.command.speed = 0.25 #fixed speed
+            self.command.yaw = self.yaw_actions[self.yaw_action_idx]
+            self.command.pitch = self.pitch_actions[self.pitch_action_idx]
+            self.command.roll = self.roll_pid.control(self.measured_roll_angle)
+            self.command.heave = 0.0
+            self.command_publisher.publish(self.command)
 
         return
 
