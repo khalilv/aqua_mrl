@@ -10,7 +10,7 @@ from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN
-from aqua_rl.helpers import define_template, reward_calculation
+from aqua_rl.helpers import define_positive_template, define_negative_template, reward_calculation
 from aqua_rl import hyperparams
 
 class dqn_controller_eval(Node):
@@ -71,7 +71,8 @@ class dqn_controller_eval(Node):
         self.episode_rewards = []
 
         #target for reward
-        self.template = define_template(self.img_size)
+        self.positive_template = define_positive_template(self.img_size)
+        self.negative_template = define_negative_template(self.img_size)
 
         #stopping condition for empty vision input
         self.empty_state_counter = 0
@@ -130,10 +131,9 @@ class dqn_controller_eval(Node):
             self.finished = True
             self.complete = True
         elif imu.x < self.start_line_x:
-            print('Drifted behind starting position')
             self.flush_commands = 0
             self.finished = True
-            self.complete = False
+            self.complete = True
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -197,7 +197,7 @@ class dqn_controller_eval(Node):
             sd = np.array(self.depth_history)
             
             #check for empty input from vision module
-            if s.sum() == 0:
+            if s.sum() < self.detection_threshold:
                 self.empty_state_counter += 1
             else:
                 self.empty_state_counter = 0
@@ -213,7 +213,7 @@ class dqn_controller_eval(Node):
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             state_depths = torch.tensor(sd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
 
-            reward = reward_calculation(seg_map, self.relative_depth, self.template, self.detection_threshold)
+            reward = reward_calculation(seg_map, self.relative_depth, self.positive_template, self.negative_template, self.detection_threshold)
             self.episode_rewards.append(reward)
             action = self.dqn.select_eval_action(state, state_depths)
 

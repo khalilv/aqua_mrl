@@ -1,33 +1,39 @@
 import numpy as np
 
-def define_template(img_size):
+def define_positive_template(img_size):
     t = np.zeros(img_size)
-    half = int(img_size[0]/2)
-    t[:,half-1:half+1] = 1
+    half = int(img_size[1]/2)
+    t[:,half-2:half+2] = 1
     return t.astype(np.uint8)
 
-def reward_calculation(seg_map, relative_depth, template, thresh):
+def define_negative_template(img_size):
+    t = np.zeros(img_size)
+    half = int(img_size[0]/2)
+    t[half-2:half+2,:] = 1
+    return t.astype(np.uint8)
+
+def reward_calculation(seg_map, relative_depth, positive_template, negative_template, detection_threshold):
     # Calculate intersection and union
-    intersection = np.logical_and(seg_map, template)
-    union = np.logical_or(seg_map, template)
-    iou = np.sum(intersection) / np.sum(union)
-    
-    #within depth range
-    if np.abs(relative_depth) < 0.5:
-        depth_reward = 0.2
-    elif np.abs(relative_depth) < 1:
-        depth_reward = 0.1
-    elif np.abs(relative_depth) < 2:
-        depth_reward = -0.1
-    else: 
-        depth_reward = -0.2
+    pi = np.logical_and(seg_map, positive_template)
+    pu = np.logical_or(seg_map, positive_template)
+    positive_iou = np.sum(pi) / np.sum(pu)
 
-    #target is in image
-    if np.sum(seg_map) >= thresh:
-        r = iou + 0.2
+    # Calculate intersection and union
+    ni = np.logical_and(seg_map, negative_template)
+    nu = np.logical_or(seg_map, negative_template)
+    negative_iou = np.sum(ni) / np.sum(nu)
+
+    if positive_iou > negative_iou:
+        r = positive_iou
     else:
-        r = -0.2
+        r = negative_iou * -2
 
+    if np.sum(seg_map) > detection_threshold:
+        bonus = 0.05
+    else:
+        bonus = 0.0
 
-    return r + depth_reward
-        
+    if np.abs(relative_depth) < 2:
+        return r + bonus
+    else:
+        return -1.0

@@ -1,7 +1,6 @@
 import numpy as np 
 from matplotlib import pyplot as plt
 import os 
-import torch 
 
 def episodic_returns(exp):
     t_dir = './experiments/{}/trajectories/'.format(str(exp))
@@ -81,8 +80,8 @@ def plot_trajectory(file, target):
     plt.show()
 
 
-experiment = 15
-episode = 100
+experiment = 17
+episode = 200
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 

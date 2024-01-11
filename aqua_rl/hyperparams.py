@@ -21,13 +21,13 @@ finish_line_ = 70
 
 #reward hyperparams
 target_depth_ = -10.0
-goal_reached_reward_ = 100
-goal_not_reached_reward_ = -10
-detection_threshold_ = 10
+goal_reached_reward_ = 0.0
+goal_not_reached_reward_ = -10.0
+detection_threshold_ = 5
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 16
+experiment_number_ = 18
 train_for_ = 10
 
 #eval hyperparams

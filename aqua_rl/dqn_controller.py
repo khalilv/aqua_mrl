@@ -11,7 +11,7 @@ from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import define_template, reward_calculation
+from aqua_rl.helpers import define_positive_template, define_negative_template, reward_calculation
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -85,8 +85,9 @@ class dqn_controller(Node):
         self.evaluate = False 
 
         #target for reward
-        self.template = define_template(self.img_size)
-        
+        self.positive_template = define_positive_template(self.img_size)
+        self.negative_template = define_negative_template(self.img_size)
+
         #stopping conditions
         self.empty_state_counter = 0
 
@@ -170,10 +171,9 @@ class dqn_controller(Node):
             self.finished = True
             self.complete = True
         if imu.x < self.start_line_x:
-            print('Drifted behind starting position')
             self.flush_commands = 0
             self.finished = True
-            self.complete = False
+            self.complete = True
         elif imu.y < self.depth_range[1]:
             print('Drifted close to seabed')
             self.flush_commands = 0
@@ -237,7 +237,7 @@ class dqn_controller(Node):
             nsd = np.array(self.depth_history)
             
             #check for empty input from vision module
-            if ns.sum() == 0:
+            if ns.sum() < self.detection_threshold:
                 self.empty_state_counter += 1
             else:
                 self.empty_state_counter = 0
@@ -252,7 +252,7 @@ class dqn_controller(Node):
            
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = reward_calculation(seg_map, self.relative_depth, self.template, self.detection_threshold)
+            reward = reward_calculation(seg_map, self.relative_depth, self.positive_template, self.negative_template, self.detection_threshold)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
 
@@ -269,7 +269,7 @@ class dqn_controller(Node):
                 self.state_depths = self.next_state_depths
 
                 # Perform one step of the optimization (on the policy network)
-                if self.dqn.steps_done % 1 == 0:
+                if self.dqn.steps_done % 10 == 0:
                     loss = self.dqn.optimize()
                     if loss is not None:        
                         self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
