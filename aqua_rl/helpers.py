@@ -12,6 +12,25 @@ def define_negative_template(img_size):
     t[half-2:half+2,:] = 1
     return t.astype(np.uint8)
 
+def define_float_template(img_size):
+    t = np.zeros(img_size)
+    hw = int(img_size[1]/2)
+    hh = int(img_size[0]/2)
+    t[:,hw-1:hw+1] = 1
+    t[0:hh, hw-6:hw-1] = 0.25
+    t[0:hh, hw+1:hw+6] = 0.25
+    t[0:int(hh*2/3), hw-12:hw-6] = 0.15
+    t[0:int(hh*2/3), hw+6:hw+12] = 0.15
+    t[0:int(hh*2/4), :hw-12] = 0.1
+    t[0:int(hh*2/4), hw+12:] = 0.1
+    return t 
+
+def float_reward_calculation(seg_map, template, relative_depth=0):
+    if np.abs(relative_depth) < 2:
+        return np.sum(np.multiply(seg_map, template))/64
+    else:
+        return -0.25
+
 def reward_calculation(seg_map, relative_depth, positive_template, negative_template, detection_threshold):
     # Calculate intersection and union
     pi = np.logical_and(seg_map, positive_template)
