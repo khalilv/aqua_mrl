@@ -6,7 +6,7 @@ img_size_ = (32,32)
 
 #control hyperparams
 roll_gains_ = [0.25, 0.0, 0.75]
-history_size_ = 20
+history_size_ = 10
 speed_ = 0.25
 pitch_limit_ = 0.008
 yaw_limit_ = 0.25

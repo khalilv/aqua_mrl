@@ -11,7 +11,7 @@ from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import define_positive_template, define_negative_template, reward_calculation, random_starting_position
+from aqua_rl.helpers import define_positive_template, define_negative_template, define_float_template, float_reward_calculation, reward_calculation, random_starting_position
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -88,6 +88,7 @@ class dqn_controller(Node):
         #target for reward
         self.positive_template = define_positive_template(self.img_size)
         self.negative_template = define_negative_template(self.img_size)
+        self.float_template = define_float_template(self.img_size)
 
         #stopping conditions
         self.empty_state_counter = 0
@@ -280,7 +281,7 @@ class dqn_controller(Node):
                 self.state_depths = self.next_state_depths
 
                 # Perform one step of the optimization (on the policy network)
-                if self.dqn.steps_done % 10 == 0:
+                if self.dqn.steps_done % 1 == 0:
                     loss = self.dqn.optimize()
                     if loss is not None:        
                         self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
@@ -348,13 +349,26 @@ class dqn_controller(Node):
     def reset(self):
         print('-------------- Resetting simulation --------------')
         
+        #increment episode and reset rewards
+        self.episode_rewards = []
+        self.episode += 1
+        self.evaluate = self.episode == self.stop_episode
+
+        if self.evaluate:
+            print('Starting evaluation')
+
         starting_pose = Pose()
 
         #starting position
-        random_position = random_starting_position() 
-        starting_pose.position.x = random_position[0]
-        starting_pose.position.z = random_position[1]                               
-        starting_pose.position.y = np.random.uniform(self.target_depth-2, self.target_depth+2)
+        if not self.evaluate:
+            random_position = random_starting_position() 
+            starting_pose.position.x = random_position[0]
+            starting_pose.position.z = random_position[1]                               
+            starting_pose.position.y = np.random.uniform(self.target_depth-2, self.target_depth+2)
+        else:
+            starting_pose.position.x = 70.0
+            starting_pose.position.z = -0.3                               
+            starting_pose.position.y = self.target_depth
         
         #starting orientation
         starting_pose.orientation.x = 0.0
@@ -369,14 +383,6 @@ class dqn_controller(Node):
         self.measured_roll_angle = 0.0
         self.relative_depth = None
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
-
-        #increment episode and reset rewards
-        self.episode_rewards = []
-        self.episode += 1
-        self.evaluate = self.episode == self.stop_episode
-
-        if self.evaluate:
-            print('Starting evaluation')
 
         #reset trajectory
         self.trajectory = []
