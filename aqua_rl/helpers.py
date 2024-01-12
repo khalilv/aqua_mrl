@@ -55,7 +55,7 @@ def reward_calculation(seg_map, relative_depth, positive_template, negative_temp
     if np.abs(relative_depth) < 2:
         return r + bonus
     else:
-        return -1.0
+        return -0.25
     
 def random_starting_position():
     starting_positions = [[70.0, -0.3],
