@@ -11,7 +11,7 @@ from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import define_positive_template, define_negative_template, reward_calculation
+from aqua_rl.helpers import define_positive_template, define_negative_template, reward_calculation, random_starting_position
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -38,7 +38,8 @@ class dqn_controller(Node):
         self.train_for = hyperparams.train_for_
         self.detection_threshold = hyperparams.detection_threshold_
         self.dirl_weights = hyperparams.dirl_weights_
-        
+        self.max_duration = hyperparams.max_duration_
+                
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
@@ -148,6 +149,8 @@ class dqn_controller(Node):
         self.command.yaw = 0.0
         self.command.heave = 0.0
 
+        self.duration = 0
+
         #reset command
         self.reset_client = self.create_client(SetPosition, '/simulator/set_position')
         self.reset_req = SetPosition.Request()
@@ -249,6 +252,14 @@ class dqn_controller(Node):
                 self.finished = True
                 self.complete = False
                 return
+            
+            if self.duration > self.max_duration:
+                print("Duration Reached")
+                self.flush_commands = 0
+                self.finished = True
+                self.complete = True
+                return
+            self.duration += 1
            
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
@@ -292,7 +303,6 @@ class dqn_controller(Node):
     def finish(self):
                        
         if self.complete:
-            print('Goal reached')
             reward = hyperparams.goal_reached_reward_
             self.episode_rewards.append(reward)
         else:
@@ -308,9 +318,10 @@ class dqn_controller(Node):
         else:
             self.writer.add_scalar('Episode Rewards (Train)', np.sum(self.episode_rewards), self.episode)
 
-        if self.state is not None and self.state_depths is not None and not self.evaluate:
-            self.dqn.memory.push(self.state, self.state_depths, self.action, None, None, self.reward)
-            self.erm.push(self.state, self.state_depths, self.action, None, None, self.reward)
+        if not self.complete:
+            if self.state is not None and self.state_depths is not None and not self.evaluate:
+                self.dqn.memory.push(self.state, self.state_depths, self.action, None, None, self.reward)
+                self.erm.push(self.state, self.state_depths, self.action, None, None, self.reward)
 
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
@@ -340,9 +351,10 @@ class dqn_controller(Node):
         starting_pose = Pose()
 
         #starting position
-        starting_pose.position.x = 70.0
-        starting_pose.position.z = -0.3                                             
-        starting_pose.position.y = self.target_depth
+        random_position = random_starting_position() 
+        starting_pose.position.x = random_position[0]
+        starting_pose.position.z = random_position[1]                               
+        starting_pose.position.y = np.random.uniform(self.target_depth-2, self.target_depth+2)
         
         #starting orientation
         starting_pose.orientation.x = 0.0
@@ -391,6 +403,8 @@ class dqn_controller(Node):
         #reset end conditions 
         self.finished = False
         self.complete = False
+
+        self.duration = 0
         
         return
     

@@ -56,3 +56,9 @@ def reward_calculation(seg_map, relative_depth, positive_template, negative_temp
         return r + bonus
     else:
         return -1.0
+    
+def random_starting_position():
+    starting_positions = [[70.0, -0.3],
+                          [32.0, 34.0],
+                          [3.0, -22.0]]
+    return starting_positions[np.random.randint(0,len(starting_positions))]

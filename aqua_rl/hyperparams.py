@@ -18,6 +18,7 @@ empty_state_max_ = 10
 depth_range_ = [-6, -14.5]
 starting_line_ = -72
 finish_line_ = 70
+max_duration_ = 800
 
 #reward hyperparams
 target_depth_ = -10.0
