@@ -150,7 +150,11 @@ class dqn_controller(Node):
         self.command.yaw = 0.0
         self.command.heave = 0.0
 
+        #duration counting
         self.duration = 0
+
+        #popen_called
+        self.popen_called = False
 
         #reset command
         self.reset_client = self.create_client(SetPosition, '/simulator/set_position')
@@ -302,14 +306,17 @@ class dqn_controller(Node):
         return 
         
     def finish(self):
-                       
+
+        if self.popen_called:
+            return 
+          
         if self.complete:
             reward = hyperparams.goal_reached_reward_
             self.episode_rewards.append(reward)
         else:
             reward = hyperparams.goal_not_reached_reward_
             self.episode_rewards.append(reward)
-
+        
         self.episode_rewards = np.array(self.episode_rewards)
         print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
         self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
@@ -343,7 +350,8 @@ class dqn_controller(Node):
         if self.episode < self.stop_episode:
             self.reset()
         else:
-            subprocess.run('python3 ./src/aqua_rl/aqua_rl/resetter.py', shell=True)
+            subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py', shell=True)
+            self.popen_called = True
         return
 
     def reset(self):

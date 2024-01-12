@@ -59,7 +59,7 @@ class segmentation(Node):
         pred = pred.astype(np.uint8)
         pred = cv2.resize(pred, self.img_size)
 
-        self.reward.data = float_reward_calculation(pred, self.template)
+        # self.reward.data = float_reward_calculation(pred, self.template)
         # self.reward_publisher.publish(self.reward)
 
         #publish state

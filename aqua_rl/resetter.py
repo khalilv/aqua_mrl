@@ -50,4 +50,4 @@ subprocess.run('ros2 service call /a13/system/set_mode aqua2_interfaces/srv/SetS
 
 time.sleep(5)
 print('Running the controller..')
-subprocess.run('ros2 run aqua_rl dqn_controller', shell=True)
+subprocess.Popen('ros2 run aqua_rl dqn_controller', shell=True)
