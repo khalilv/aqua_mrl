@@ -233,39 +233,34 @@ class dqn_controller(Node):
             return
 
         seg_map = np.array(seg_map.data).reshape(self.img_size)
-        if len(self.image_history) < self.history_size:
-            self.depth_history.append(self.relative_depth)
-            self.image_history.append(seg_map)
+        #check for empty input from vision module
+        if seg_map.sum() < self.detection_threshold:
+            self.empty_state_counter += 1
         else:
-            self.image_history.pop(0)
-            self.image_history.append(seg_map)
-            self.depth_history.pop(0)
-            self.depth_history.append(self.relative_depth)
+            self.empty_state_counter = 0
+        
+        #if nothing has been detected in empty_state_max frames then reset
+        if self.empty_state_counter >= self.empty_state_max:
+            print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
+            return
+        
+        if self.duration > self.max_duration:
+            print("Duration Reached")
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = True
+            return
+        self.duration += 1
+        
+        self.depth_history.append(self.relative_depth)
+        self.image_history.append(seg_map)
+        if len(self.image_history) == self.history_size:
             ns = np.array(self.image_history)
             nsd = np.array(self.depth_history)
-            
-            #check for empty input from vision module
-            if ns.sum() < self.detection_threshold:
-                self.empty_state_counter += 1
-            else:
-                self.empty_state_counter = 0
-            
-            #if nothing has been detected in empty_state_max frames then reset
-            if self.empty_state_counter >= self.empty_state_max:
-                print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
-                self.flush_commands = 0
-                self.finished = True
-                self.complete = False
-                return
-            
-            if self.duration > self.max_duration:
-                print("Duration Reached")
-                self.flush_commands = 0
-                self.finished = True
-                self.complete = True
-                return
-            self.duration += 1
-           
+                                  
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             reward = reward_calculation(seg_map, self.relative_depth, self.positive_template, self.negative_template, self.detection_threshold)
@@ -297,6 +292,10 @@ class dqn_controller(Node):
                         target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
                     self.dqn.target_net.load_state_dict(target_net_state_dict)
 
+            self.image_history = []
+            self.depth_history = []
+
+        if self.action is not None:
             action_idx = self.action.detach().cpu().numpy()[0][0]
             self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
             self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            

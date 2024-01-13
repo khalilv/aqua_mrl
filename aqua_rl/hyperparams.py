@@ -6,7 +6,7 @@ img_size_ = (32,32)
 
 #control hyperparams
 roll_gains_ = [0.25, 0.0, 0.75]
-history_size_ = 10
+history_size_ = 5
 speed_ = 0.25
 pitch_limit_ = 0.008
 yaw_limit_ = 0.25
@@ -14,11 +14,11 @@ yaw_action_space_ = 3
 pitch_action_space_ = 3
 
 #end of episode hyperparams
-empty_state_max_ = 10
+empty_state_max_ = 30
 depth_range_ = [-6, -14.5]
 starting_line_ = -72
 finish_line_ = 70
-max_duration_ = 800
+max_duration_ = 1000
 
 #reward hyperparams
 target_depth_ = -10.0
@@ -36,4 +36,4 @@ eval_episode_ = 10
 eval_for_ = 10
 
 #dirl
-dirl_weights_ = 'src/aqua_rl/imitation_learning_module/models/best.pt' #set to None if starting from random weights
+dirl_weights_ = None #'src/aqua_rl/imitation_learning_module/models/best.pt' #set to None if starting from random weights
