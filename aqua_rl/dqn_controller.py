@@ -57,6 +57,7 @@ class dqn_controller(Node):
         self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
+        self.flush_depth = 0
 
         #finished is episode has ended. complete is if aqua has reached the goal 
         self.finished = False
@@ -180,16 +181,6 @@ class dqn_controller(Node):
             self.flush_commands = 0
             self.finished = True
             self.complete = True
-        elif imu.y < self.depth_range[1]:
-            print('Drifted close to seabed')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
-        elif imu.y > self.depth_range[0]:
-            print('Drifted far above target')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
@@ -198,7 +189,28 @@ class dqn_controller(Node):
         return imu.roll
     
     def depth_callback(self, depth):
-        self.relative_depth = self.target_depth + depth.data
+        
+        #finished flag
+        if self.finished:
+            return
+        
+        #flush queue
+        if self.flush_depth < self.flush_steps:
+            self.flush_depth += 1
+            return
+        
+        if -depth.data < self.depth_range[1]:
+            print('Drifted close to seabed')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
+        elif -depth.data > self.depth_range[0]:
+            print('Drifted far above target')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
+        else:
+            self.relative_depth = self.target_depth + depth.data
         return
 
     def segmentation_callback(self, seg_map):
@@ -408,6 +420,7 @@ class dqn_controller(Node):
         self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
+        self.flush_depth = 0
 
         #reset counters
         self.empty_state_counter = 0
