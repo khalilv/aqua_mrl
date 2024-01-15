@@ -10,7 +10,7 @@ import time
 from std_msgs.msg import UInt8MultiArray, Float32
 import os
 from aqua_rl import hyperparams
-from aqua_rl.helpers import define_float_template, float_reward_calculation
+from aqua_rl.helpers import define_template, reward_calculation
 
 class segmentation(Node):
 
@@ -38,7 +38,7 @@ class segmentation(Node):
 
         self.reward_publisher = self.create_publisher(Float32, '/reward', self.queue_size)
         self.reward = Float32()
-        self.template = define_float_template(self.img_size)
+        self.template = define_template(self.img_size)
 
 
         cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
@@ -59,7 +59,7 @@ class segmentation(Node):
         pred = pred.astype(np.uint8)
         pred = cv2.resize(pred, self.img_size)
 
-        # self.reward.data = float_reward_calculation(pred, self.template)
+        # self.reward.data = reward_calculation(pred, 0.0, self.template)
         # self.reward_publisher.publish(self.reward)
 
         #publish state
