@@ -11,7 +11,7 @@ from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import define_positive_template, define_negative_template, define_float_template, float_reward_calculation, reward_calculation, random_starting_position
+from aqua_rl.helpers import define_template, reward_calculation, random_starting_position
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -86,9 +86,7 @@ class dqn_controller(Node):
         self.evaluate = False 
 
         #target for reward
-        self.positive_template = define_positive_template(self.img_size)
-        self.negative_template = define_negative_template(self.img_size)
-        self.float_template = define_float_template(self.img_size)
+        self.template = define_template(self.img_size)
 
         #stopping conditions
         self.empty_state_counter = 0
@@ -263,7 +261,8 @@ class dqn_controller(Node):
                                   
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = reward_calculation(seg_map, self.relative_depth, self.positive_template, self.negative_template, self.detection_threshold)
+            reward = reward_calculation(seg_map, self.relative_depth, self.template)
+
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
 

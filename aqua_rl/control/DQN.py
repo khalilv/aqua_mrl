@@ -65,11 +65,11 @@ class DQN:
     def __init__(self, n_actions, history_size) -> None:
         self.BATCH_SIZE = 128
         self.GAMMA = 0.99
-        self.EPS_START = 0.5
+        self.EPS_START = 0.8
         self.EPS_END = 0.1
-        self.EPS_DECAY = 100000
-        self.TAU = 0.002
-        LR = 1e-4
+        self.EPS_DECAY = 60000
+        self.TAU = 0.005
+        LR = 1e-3
         self.MEMORY_SIZE = 60000
         self.n_actions = n_actions
         self.history_size = history_size
@@ -129,10 +129,10 @@ class DQN:
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
         with torch.no_grad():
             #DQN
-            #next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).max(1)[0] #max_a Qt(S_t+1, a)
+            next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).max(1)[0] #max_a Qt(S_t+1, a)
 
             #DDQN
-            next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).gather(1, self.policy_net(non_final_next_states, non_final_next_state_depths).argmax(1).reshape(1,-1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+            #next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).gather(1, self.policy_net(non_final_next_states, non_final_next_state_depths).argmax(1).reshape(1,-1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
         
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch  #R + gamma * target
