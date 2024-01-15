@@ -1,8 +1,4 @@
 import numpy as np
-from aqua_rl.control.DQN import ReplayMemory, Transition
-import torch
-import os 
-from matplotlib import pyplot as plt
 
 def define_template(img_size):
     t = np.zeros(img_size)
