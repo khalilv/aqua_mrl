@@ -63,12 +63,12 @@ class DQNNetwork(nn.Module):
 class DQN:
 
     def __init__(self, n_actions, history_size) -> None:
-        self.BATCH_SIZE = 128
+        self.BATCH_SIZE = 32
         self.GAMMA = 0.99
         self.EPS_START = 0.8
         self.EPS_END = 0.1
         self.EPS_DECAY = 60000
-        self.TAU = 0.005
+        self.TAU = 0.002
         LR = 1e-3
         self.MEMORY_SIZE = 60000
         self.n_actions = n_actions
@@ -85,7 +85,6 @@ class DQN:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
             math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        self.steps_done += 1
         if sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return the largest column value of each row.
@@ -102,6 +101,7 @@ class DQN:
     def optimize(self):
         if len(self.memory) < self.BATCH_SIZE:
             return None
+        self.steps_done += 1
         transitions = self.memory.sample(self.BATCH_SIZE)
         batch = Transition(*zip(*transitions))
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,

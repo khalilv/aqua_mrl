@@ -40,6 +40,7 @@ def analyze_erm(erm_path):
         next_state = torch.cat(transition.next_state).detach().cpu().numpy()
         next_state_depths = torch.cat(transition.next_state_depths).detach().cpu().numpy()
         action = torch.cat(transition.action).detach().cpu().numpy()
+        reward = torch.cat(transition.reward).detach().cpu().numpy()
         fig, axs = plt.subplots(2, 10, figsize=(30,30))
         for i in range(state.shape[1]):
             axs[0,i].imshow(state[0,i,:,:])
@@ -52,18 +53,20 @@ def analyze_erm(erm_path):
         pitch = pitch_actions[int(action_idx/len(yaw_actions))]
         yaw = yaw_actions[action_idx % len(yaw_actions)]
         if pitch < 0:
-            title += "pitch up "
+            title += "(pitch up, "
         elif pitch > 0:
-            title += "pitch down "
+            title += "(pitch down, "
         elif pitch == 0.0:
-            title += "no pitch "
+            title += "(no pitch, "
 
         if yaw < 0:
-            title += "yaw left"
+            title += "yaw left)"
         elif yaw > 0:
-            title += "yaw right"
+            title += "yaw right) "
         elif yaw == 0.0:
-            title += "no yaw"
+            title += "no yaw) "
+
+        title += 'Reward: {}'.format(reward)
         fig.suptitle(title, fontsize=30)
         plt.show()
 

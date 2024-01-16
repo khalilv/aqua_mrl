@@ -273,7 +273,7 @@ class dqn_controller(Node):
                                   
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = reward_calculation(seg_map, self.relative_depth, self.template)
+            reward = reward_calculation((np.sum(ns, axis=0) > 2).astype(int), np.mean(self.relative_depth), self.template)
 
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
@@ -290,21 +290,23 @@ class dqn_controller(Node):
                 self.state = self.next_state
                 self.state_depths = self.next_state_depths
 
-                # Perform one step of the optimization (on the policy network)
-                if self.dqn.steps_done % 1 == 0:
-                    loss = self.dqn.optimize()
-                    if loss is not None:        
-                        self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
-                    # Soft update of the target network's weights
-                    # θ′ ← τ θ + (1 −τ )θ′
-                    target_net_state_dict = self.dqn.target_net.state_dict()
-                    policy_net_state_dict = self.dqn.policy_net.state_dict()
-                    for key in policy_net_state_dict:
-                        target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
-                    self.dqn.target_net.load_state_dict(target_net_state_dict)
-
             self.image_history = []
             self.depth_history = []
+        
+        if not self.evaluate:
+            # Perform one step of the optimization (on the policy network)
+            if self.dqn.steps_done % 1 == 0:
+                loss = self.dqn.optimize()
+                if loss is not None:        
+                    self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
+                # Soft update of the target network's weights
+                # θ′ ← τ θ + (1 −τ )θ′
+                target_net_state_dict = self.dqn.target_net.state_dict()
+                policy_net_state_dict = self.dqn.policy_net.state_dict()
+                for key in policy_net_state_dict:
+                    target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
+                self.dqn.target_net.load_state_dict(target_net_state_dict)
+
 
         if self.action is not None:
             action_idx = self.action.detach().cpu().numpy()[0][0]

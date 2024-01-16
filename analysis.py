@@ -58,6 +58,36 @@ def depth_distribution(exp):
     plt.errorbar(x=eval_x, y=eval_depth_mean, yerr=eval_depth_std, ecolor='yellow', fmt='o')
     plt.show()
 
+def duration_distribution(exp):
+    t_dir = './experiments/{}/trajectories/'.format(str(exp))
+    e_dir = './experiments/{}/weights/'.format(str(exp))
+    train_duration = []
+    train_x = []
+    eval_duration = []
+    eval_x = []
+    for i, file_path in enumerate(sorted(os.listdir(t_dir))):
+        # check if current file_path is a file
+        file = os.path.join(t_dir, file_path)
+        with open(file, 'rb') as f:
+            _ = np.load(f)
+            trajectory = np.load(f)
+            duration = trajectory.shape[0]
+            if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
+                eval_duration.append(duration)
+                eval_x.append(i)
+            else:
+                train_duration.append(duration)
+                train_x.append(i)
+                        
+    plt.plot(train_x, train_duration, color='blue', label='Train')
+    plt.plot(eval_x, eval_duration, color='yellow', label='Eval')
+    plt.xlabel('Episode')
+    plt.ylabel('Timesteps')
+    plt.title('Duration')
+    plt.legend()
+    plt.show()
+
+
 
 def plot_trajectory(file, target):
     with open(file, 'rb') as f:
@@ -80,13 +110,14 @@ def plot_trajectory(file, target):
     plt.show()
 
 
-experiment = 17
-episode = 200
+experiment = 22
+episode = 413
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
 episodic_returns(experiment)
 depth_distribution(experiment)
+duration_distribution(experiment)
 plot_trajectory(file, target)
 
 
