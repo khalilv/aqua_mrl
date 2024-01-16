@@ -39,7 +39,8 @@ class dqn_controller(Node):
         self.detection_threshold = hyperparams.detection_threshold_
         self.dirl_weights = hyperparams.dirl_weights_
         self.max_duration = hyperparams.max_duration_
-                
+        self.frames_to_skip = hyperparams.frames_to_skip_
+
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
@@ -75,10 +76,13 @@ class dqn_controller(Node):
         self.next_state = None
         self.state_depths = None
         self.next_state_depths = None
-        self.action = None
+        self.state_actions = None
+        self.next_state_actions = None
+        self.action = torch.tensor([[4]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.image_history = []
         self.depth_history = []
+        self.action_history = [4]
         self.episode_rewards = []
         self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
         
@@ -267,12 +271,15 @@ class dqn_controller(Node):
         
         self.depth_history.append(self.relative_depth)
         self.image_history.append(seg_map)
-        if len(self.image_history) == self.history_size:
+        if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
             ns = np.array(self.image_history)
             nsd = np.array(self.depth_history)
-                                  
+            nsa = np.array(self.action_history)
+  
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+
             reward = reward_calculation((np.sum(ns, axis=0) > 2).astype(int), np.mean(self.relative_depth), self.template)
 
             self.episode_rewards.append(reward)
@@ -280,19 +287,21 @@ class dqn_controller(Node):
 
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.action = self.dqn.select_eval_action(self.next_state, self.next_state_depths)
+                self.action = self.dqn.select_eval_action(self.next_state, self.next_state_depths, self.next_state_actions)
             else:
-                if self.state is not None and self.action is not None and self.state_depths is not None:
-                    self.dqn.memory.push(self.state, self.state_depths, self.action, self.next_state, self.next_state_depths, self.reward)
-                    self.erm.push(self.state, self.state_depths, self.action, self.next_state, self.next_state_depths, self.reward)
+                if self.state is not None and self.state_depths is not None and self.state_actions is not None:
+                    self.dqn.memory.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
+                    self.erm.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
 
-                self.action = self.dqn.select_action(self.next_state, self.next_state_depths)       
+                self.action = self.dqn.select_action(self.next_state, self.next_state_depths, self.next_state_actions)       
                 self.state = self.next_state
                 self.state_depths = self.next_state_depths
+                self.state_actions = self.next_state_actions
 
-            self.image_history = []
-            self.depth_history = []
-        
+            self.image_history = self.image_history[self.frames_to_skip:]
+            self.depth_history = self.depth_history[self.frames_to_skip:]
+            self.action_history = self.action_history[self.frames_to_skip:]
+
         if not self.evaluate:
             # Perform one step of the optimization (on the policy network)
             if self.dqn.steps_done % 1 == 0:
@@ -307,14 +316,13 @@ class dqn_controller(Node):
                     target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
                 self.dqn.target_net.load_state_dict(target_net_state_dict)
 
-
-        if self.action is not None:
-            action_idx = self.action.detach().cpu().numpy()[0][0]
-            self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
-            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
-            self.command.speed = hyperparams.speed_ #fixed speed
-            self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-            self.command_publisher.publish(self.command)
+        action_idx = self.action.detach().cpu().numpy()[0][0]
+        self.action_history.append(action_idx)
+        self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
+        self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
+        self.command.speed = hyperparams.speed_ #fixed speed
+        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
+        self.command_publisher.publish(self.command)
         return 
         
     def finish(self):
@@ -338,10 +346,9 @@ class dqn_controller(Node):
         else:
             self.writer.add_scalar('Episode Rewards (Train)', np.sum(self.episode_rewards), self.episode)
 
-        if not self.complete:
-            if self.state is not None and self.state_depths is not None and not self.evaluate:
-                self.dqn.memory.push(self.state, self.state_depths, self.action, None, None, self.reward)
-                self.erm.push(self.state, self.state_depths, self.action, None, None, self.reward)
+        if self.state is not None and self.state_depths is not None and self.state_actions is not None and not self.evaluate and not self.complete:
+            self.dqn.memory.push(self.state, self.state_depths, self.state_actions, self.action, None, None, None, self.reward)
+            self.erm.push(self.state, self.state_depths, self.state_actions, self.action, None, None, None, self.reward)
 
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
@@ -412,10 +419,13 @@ class dqn_controller(Node):
         self.next_state = None
         self.state_depths = None
         self.next_state_depths = None
-        self.action = None
+        self.state_actions = None
+        self.next_state_actions = None
+        self.action = torch.tensor([[4]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.image_history = []
         self.depth_history = []
+        self.action_history = [4]
 
         #reset flush queues 
         self.flush_commands = self.flush_steps

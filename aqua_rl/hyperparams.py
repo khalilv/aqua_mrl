@@ -30,6 +30,7 @@ detection_threshold_ = 5
 load_erm_ = True
 experiment_number_ = 21
 train_for_ = 10
+frames_to_skip_ = 3
 
 #eval hyperparams
 eval_episode_ = 10
