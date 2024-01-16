@@ -129,10 +129,10 @@ class DQN:
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
         with torch.no_grad():
             #DQN
-            next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).max(1)[0] #max_a Qt(S_t+1, a)
+            #next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).max(1)[0] #max_a Qt(S_t+1, a)
 
             #DDQN
-            #next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).gather(1, self.policy_net(non_final_next_states, non_final_next_state_depths).argmax(1).reshape(1,-1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+            next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).gather(1, self.policy_net(non_final_next_states, non_final_next_state_depths).argmax(1).reshape(1,-1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
         
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch  #R + gamma * target
