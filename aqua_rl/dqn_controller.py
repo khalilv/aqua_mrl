@@ -280,7 +280,7 @@ class dqn_controller(Node):
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
 
-            reward = reward_calculation((np.sum(ns, axis=0) > 2).astype(int), np.mean(self.relative_depth), self.template)
+            reward = reward_calculation(seg_map, self.relative_depth, self.template)
 
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
