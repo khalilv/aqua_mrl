@@ -6,21 +6,33 @@ def define_template(img_size):
     t[:,half-1:half+1] = 1
     return t.astype(np.uint8)
 
-def reward_calculation(seg_map, relative_depth, template):
-    # Calculate intersection and union
-    intersection = np.logical_and(seg_map, template)
-    union = np.logical_or(seg_map, template)
-    iou = np.sum(intersection) / np.sum(union)
+def vertical_alignment_score(mask):
+    # columns where 1s are present
+    column_indices = np.where(np.any(mask, axis=0))[0]
+    # variance
+    var = np.var(column_indices)
+    #lower variance = higher score
+    score = 1 / (1 + var)
+    return score
 
-    if np.abs(relative_depth) < 2:
-        return iou 
+def reward_calculation(seg_map, relative_depth, detection_threshold):
+    roi = seg_map[8:-8,8:-8]
+    if np.sum(roi) > detection_threshold:
+        r = vertical_alignment_score(seg_map)
     else:
-        return -0.1   
+        r = -0.25
     
+    if np.abs(relative_depth) < 2:
+        d = 0.0
+    else:
+        d = -0.25
+    
+    return r + d
+   
 def random_starting_position():
-    starting_positions = [[70.0, -0.3],]
-                        #   [32.0, 34.0],
-                        #   [3.0, -22.0]]
+    starting_positions = [[70.0, -0.3]]
+    #[32.0, 34.0]
+    #[3.0, -22.0]
     return starting_positions[np.random.randint(0,len(starting_positions))]
 
 def analyze_erm(erm_path):
@@ -69,7 +81,7 @@ def analyze_erm(erm_path):
         title += 'Reward: {}'.format(reward)
         fig.suptitle(title, fontsize=30)
         plt.show()
-
+        
 # def define_negative_template(img_size):
 #     t = np.zeros(img_size)
 #     half = int(img_size[0]/2)

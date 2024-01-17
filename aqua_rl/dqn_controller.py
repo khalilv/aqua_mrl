@@ -180,11 +180,11 @@ class dqn_controller(Node):
         if imu.x > self.finish_line_x:
             self.flush_commands = 0
             self.finished = True
-            self.complete = True
+            self.complete = False
         if imu.x < self.start_line_x:
             self.flush_commands = 0
             self.finished = True
-            self.complete = True
+            self.complete = False
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
@@ -280,7 +280,7 @@ class dqn_controller(Node):
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
 
-            reward = reward_calculation(seg_map, self.relative_depth, self.template)
+            reward = reward_calculation(seg_map, self.relative_depth, self.detection_threshold)
 
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
