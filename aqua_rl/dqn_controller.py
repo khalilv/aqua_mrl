@@ -346,6 +346,8 @@ class dqn_controller(Node):
         else:
             self.writer.add_scalar('Episode Rewards (Train)', np.sum(self.episode_rewards), self.episode)
 
+        self.writer.add_scalar('Duration', self.duration, self.episode)
+
         if self.state is not None and self.state_depths is not None and self.state_actions is not None and not self.evaluate and not self.complete:
             self.dqn.memory.push(self.state, self.state_depths, self.state_actions, self.action, None, None, None, self.reward)
             self.erm.push(self.state, self.state_depths, self.state_actions, self.action, None, None, None, self.reward)
