@@ -16,8 +16,7 @@ def vertical_alignment_score(mask):
     return score
 
 def reward_calculation(seg_map, relative_depth, detection_threshold):
-    roi = seg_map[8:-8,8:-8]
-    if np.sum(roi) > detection_threshold:
+    if np.sum(seg_map) > 10:
         r = vertical_alignment_score(seg_map)
     else:
         r = -0.25
