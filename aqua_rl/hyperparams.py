@@ -35,8 +35,14 @@ train_for_ = 10
 frames_to_skip_ = 5
 
 #eval hyperparams
-eval_episode_ = 10
-eval_for_ = 10
+eval_episode_ = 356
+eval_for_ = 3
+
+#adversary hyperparams
+adv_action_space_ = 6
+adv_magnitude_x_ = 0.25
+adv_magnitude_y_ = 0.05
+adv_magnitude_z_ = 0.25
 
 #dirl
 dirl_weights_ = None #'src/aqua_rl/imitation_learning_module/models/best.pt' #set to None if starting from random weights

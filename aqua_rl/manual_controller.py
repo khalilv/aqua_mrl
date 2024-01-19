@@ -1,20 +1,14 @@
 import rclpy
 import torch
 import numpy as np 
-import os
-import subprocess
 from pynput import keyboard
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
-from ir_aquasim_interfaces.srv import SetPosition
-from geometry_msgs.msg import Pose
 from std_msgs.msg import UInt8MultiArray, Float32
-from time import sleep, time
 from aqua_rl.control.PID import AnglePID, PID
 from aqua_rl.control.DQN import ReplayMemory
-from aqua_rl.helpers import define_template, reward_calculation, random_starting_position
+from aqua_rl.helpers import reward_calculation
 from aqua_rl import hyperparams
-from torch.utils.tensorboard import SummaryWriter 
 
 
 class manual_controller(Node):
@@ -31,7 +25,11 @@ class manual_controller(Node):
         self.img_size = hyperparams.img_size_
         self.depth_range = hyperparams.depth_range_
         self.target_depth = hyperparams.target_depth_
-        
+        self.frames_to_skip = hyperparams.frames_to_skip_
+        self.roi_detection_threshold = hyperparams.roi_detection_threshold_
+        self.mean_importance = hyperparams.mean_importance_
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
@@ -41,7 +39,6 @@ class manual_controller(Node):
             self.segmentation_callback, 
             self.queue_size)
         self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
-
 
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
         self.pitch_pid = PID(target = 0.0, gains = [0.005, 0.0, 0.175])
@@ -56,23 +53,15 @@ class manual_controller(Node):
         self.next_state = None
         self.state_depths = None
         self.next_state_depths = None
-        self.action = None
+        self.state_actions = None
+        self.next_state_actions = None
+        self.action = torch.tensor([[4]], device=self.device, dtype=torch.long)
         self.reward = None
         self.image_history = []
         self.depth_history = []
+        self.action_history = [4]
         self.episode_rewards = []
         self.erm = ReplayMemory(60000)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        #trajectory recording
-        self.trajectory = []
-        self.evaluate = False 
-
-        #target for reward
-        self.template = define_template(self.img_size)
-
-        #stopping conditions
-        self.empty_state_counter = 0
 
         #initialize command
         self.command = Command()
@@ -99,17 +88,14 @@ class manual_controller(Node):
             else:
                 self.yaw_action_idx = 1 #straight
         except AttributeError:
-            if key == keyboard.Key.space: # save image
-                #save erm
+            if key == keyboard.Key.space: # save erm
                 torch.save({
                     'memory': self.erm
-                }, './expert_erm.pt')
-                print('Saved ERM.')
+                }, './src/aqua_rl/expert_erm.pt')
+                print('Saved ERM. Please kill node now')
                 input()
                 return
         return 
-
-        
 
     def imu_callback(self, imu):
         self.measured_roll_angle = self.calculate_roll(imu)
@@ -132,19 +118,22 @@ class manual_controller(Node):
                
         self.depth_history.append(self.relative_depth)
         self.image_history.append(seg_map)
-        if len(self.image_history) == self.history_size:
+        if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
             ns = np.array(self.image_history)
             nsd = np.array(self.depth_history)
+            nsa = np.array(self.action_history)
                                   
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.device).unsqueeze(0)
-            reward = reward_calculation((np.sum(ns, axis=0) > 2).astype(int), np.mean(self.relative_depth), self.template)
+            self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.device).unsqueeze(0)
+
+            reward = reward_calculation(seg_map, self.relative_depth, self.roi_detection_threshold, self.mean_importance)
 
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
-            print(np.sum(self.episode_rewards))
-            if self.state is not None and self.action is not None and self.state_depths is not None:
-                self.erm.push(self.state, self.state_depths, self.action, self.next_state, self.next_state_depths, self.reward)
+
+            if self.state is not None and self.state_depths is not None and self.state_actions is not None:
+                self.erm.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
             
             self.pitch_action_idx = self.discretize(self.pitch_pid.control(self.relative_depth), self.pitch_actions)
             a = int(self.pitch_action_idx*self.yaw_action_space) + self.yaw_action_idx
@@ -152,17 +141,19 @@ class manual_controller(Node):
             self.action = a    
             self.state = self.next_state
             self.state_depths = self.next_state_depths
+            self.state_actions = self.next_state_actions
 
-            self.image_history = []
-            self.depth_history = []
-        
-        if self.action is not None:
-            action_idx = self.action.detach().cpu().numpy()[0][0]
-            self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
-            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
-            self.command.speed = hyperparams.speed_ #fixed speed
-            self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-            self.command_publisher.publish(self.command)
+            self.image_history = self.image_history[self.frames_to_skip:]
+            self.depth_history = self.depth_history[self.frames_to_skip:]
+            self.action_history = self.action_history[self.frames_to_skip:]
+  
+        action_idx = self.action.detach().cpu().numpy()[0][0]
+        self.action_history.append(action_idx)
+        self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
+        self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
+        self.command.speed = hyperparams.speed_ #fixed speed
+        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
+        self.command_publisher.publish(self.command)
         return 
     
     def discretize(self, v, l):
