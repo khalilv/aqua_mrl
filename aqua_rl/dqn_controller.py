@@ -11,7 +11,7 @@ from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import define_template, reward_calculation, random_starting_position
+from aqua_rl.helpers import reward_calculation, random_starting_position
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -40,6 +40,8 @@ class dqn_controller(Node):
         self.dirl_weights = hyperparams.dirl_weights_
         self.max_duration = hyperparams.max_duration_
         self.frames_to_skip = hyperparams.frames_to_skip_
+        self.roi_detection_threshold = hyperparams.roi_detection_threshold_
+        self.mean_importance = hyperparams.mean_importance_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -89,9 +91,6 @@ class dqn_controller(Node):
         #trajectory recording
         self.trajectory = []
         self.evaluate = False 
-
-        #target for reward
-        self.template = define_template(self.img_size)
 
         #stopping conditions
         self.empty_state_counter = 0
@@ -178,13 +177,15 @@ class dqn_controller(Node):
         self.measured_roll_angle = self.calculate_roll(imu)
 
         if imu.x > self.finish_line_x:
+            print('Reached finish line')
             self.flush_commands = 0
             self.finished = True
-            self.complete = False
+            self.complete = True
         if imu.x < self.start_line_x:
+            print('Tracked backwards to starting line')
             self.flush_commands = 0
             self.finished = True
-            self.complete = False
+            self.complete = True
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
@@ -280,7 +281,7 @@ class dqn_controller(Node):
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
 
-            reward = reward_calculation(seg_map, self.relative_depth, self.detection_threshold)
+            reward = reward_calculation(seg_map, self.relative_depth, self.roi_detection_threshold, self.mean_importance)
 
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
@@ -393,7 +394,7 @@ class dqn_controller(Node):
             random_position = random_starting_position() 
             starting_pose.position.x = random_position[0]
             starting_pose.position.z = random_position[1]                               
-            starting_pose.position.y = np.random.uniform(self.target_depth-2, self.target_depth+2)
+            starting_pose.position.y = np.random.uniform(self.target_depth-1, self.target_depth+1)
         else:
             starting_pose.position.x = 70.0
             starting_pose.position.z = -0.3                               

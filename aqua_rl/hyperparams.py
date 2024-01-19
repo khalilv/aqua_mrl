@@ -25,6 +25,8 @@ target_depth_ = -10.0
 goal_reached_reward_ = 0.0
 goal_not_reached_reward_ = -1.0
 detection_threshold_ = 5
+roi_detection_threshold_ = 10
+mean_importance_ = 0.5 #[0,1]
 
 #training hyperparams
 load_erm_ = True
