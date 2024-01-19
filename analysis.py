@@ -58,6 +58,34 @@ def depth_distribution(exp):
     plt.errorbar(x=eval_x, y=eval_depth_mean, yerr=eval_depth_std, ecolor='yellow', fmt='o')
     plt.show()
 
+def duration_distribution(exp):
+    t_dir = './experiments/{}/trajectories/'.format(str(exp))
+    e_dir = './experiments/{}/weights/'.format(str(exp))
+    train_duration = []
+    train_x = []
+    eval_duration = []
+    eval_x = []
+    for i, file_path in enumerate(sorted(os.listdir(t_dir))):
+        # check if current file_path is a file
+        file = os.path.join(t_dir, file_path)
+        with open(file, 'rb') as f:
+            _ = np.load(f)
+            trajectory = np.load(f)
+            duration = trajectory.shape[0]
+            if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
+                eval_duration.append(duration)
+                eval_x.append(i)
+            else:
+                train_duration.append(duration)
+                train_x.append(i)
+                        
+    plt.plot(train_x, train_duration, color='blue', label='Train')
+    plt.plot(eval_x, eval_duration, color='yellow', label='Eval')
+    plt.xlabel('Episode')
+    plt.ylabel('Timesteps')
+    plt.title('Duration')
+    plt.legend()
+    plt.show()
 
 def plot_trajectory(file, target):
     with open(file, 'rb') as f:
@@ -79,14 +107,65 @@ def plot_trajectory(file, target):
     plt.legend()
     plt.show()
 
+def analyze_erm(erm_path):
+    import torch
+    from aqua_rl.control.DQN import ReplayMemory, Transition
+    from matplotlib import pyplot as plt
+    pitch_actions = yaw_actions = [-1,0,1]
+    history_size = 10
+    target_depth = -10
+    erm = ReplayMemory(10000)
+    memory = torch.load(erm_path, map_location= torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    erm = memory['memory']
+    while True:
+        transition = erm.sample(1)
+        transition = Transition(*zip(*transition))
+        state = torch.cat(transition.state).detach().cpu().numpy()
+        state_depths = torch.cat(transition.state_depths).detach().cpu().numpy()
+        state_actions = torch.cat(transition.state_actions).detach().cpu().numpy()
+        next_state = torch.cat(transition.next_state).detach().cpu().numpy()
+        next_state_depths = torch.cat(transition.next_state_depths).detach().cpu().numpy()
+        next_state_actions = torch.cat(transition.next_state_actions).detach().cpu().numpy()
+        action = torch.cat(transition.action).detach().cpu().numpy()
+        reward = torch.cat(transition.reward).detach().cpu().numpy()
+        fig, axs = plt.subplots(2, history_size, figsize=(30,30))
+        for i in range(state.shape[1]):
+            axs[0,i].imshow(state[0,i,:,:])
+            axs[0,i].set_title("{}, {}".format(np.round(state_depths[0,i] - target_depth, decimals=3), state_actions[0,i]))
+        for i in range(next_state.shape[1]):
+            axs[1,i].imshow(next_state[0,i,:,:])
+            axs[1,i].set_title("{}, {}".format(np.round(next_state_depths[0,i] - target_depth, decimals=3), next_state_actions[0,i]))
+        title = "Action: "
+        action_idx = action[0][0]
+        pitch = pitch_actions[int(action_idx/len(yaw_actions))]
+        yaw = yaw_actions[action_idx % len(yaw_actions)]
+        if pitch < 0:
+            title += "(pitch up, "
+        elif pitch > 0:
+            title += "(pitch down, "
+        elif pitch == 0.0:
+            title += "(no pitch, "
 
-experiment = 17
-episode = 200
+        if yaw < 0:
+            title += "yaw left)"
+        elif yaw > 0:
+            title += "yaw right) "
+        elif yaw == 0.0:
+            title += "no yaw) "
+
+        title += 'Reward: {}'.format(reward)
+        fig.suptitle(title, fontsize=30)
+        plt.show()
+
+
+experiment = 26
+episode = 340
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
 episodic_returns(experiment)
 depth_distribution(experiment)
+duration_distribution(experiment)
 plot_trajectory(file, target)
 
 

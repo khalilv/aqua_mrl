@@ -11,7 +11,7 @@ from std_msgs.msg import UInt8MultiArray, Float32
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import define_positive_template, define_negative_template, define_float_template, float_reward_calculation, reward_calculation, random_starting_position
+from aqua_rl.helpers import reward_calculation, random_starting_position
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -39,7 +39,10 @@ class dqn_controller(Node):
         self.detection_threshold = hyperparams.detection_threshold_
         self.dirl_weights = hyperparams.dirl_weights_
         self.max_duration = hyperparams.max_duration_
-                
+        self.frames_to_skip = hyperparams.frames_to_skip_
+        self.roi_detection_threshold = hyperparams.roi_detection_threshold_
+        self.mean_importance = hyperparams.mean_importance_
+
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
@@ -57,6 +60,7 @@ class dqn_controller(Node):
         self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
+        self.flush_depth = 0
 
         #finished is episode has ended. complete is if aqua has reached the goal 
         self.finished = False
@@ -74,21 +78,19 @@ class dqn_controller(Node):
         self.next_state = None
         self.state_depths = None
         self.next_state_depths = None
-        self.action = None
+        self.state_actions = None
+        self.next_state_actions = None
+        self.action = torch.tensor([[4]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.image_history = []
         self.depth_history = []
+        self.action_history = [4]
         self.episode_rewards = []
         self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
         
         #trajectory recording
         self.trajectory = []
         self.evaluate = False 
-
-        #target for reward
-        self.positive_template = define_positive_template(self.img_size)
-        self.negative_template = define_negative_template(self.img_size)
-        self.float_template = define_float_template(self.img_size)
 
         #stopping conditions
         self.empty_state_counter = 0
@@ -175,23 +177,15 @@ class dqn_controller(Node):
         self.measured_roll_angle = self.calculate_roll(imu)
 
         if imu.x > self.finish_line_x:
+            print('Reached finish line')
             self.flush_commands = 0
             self.finished = True
             self.complete = True
         if imu.x < self.start_line_x:
+            print('Tracked backwards to starting line')
             self.flush_commands = 0
             self.finished = True
             self.complete = True
-        elif imu.y < self.depth_range[1]:
-            print('Drifted close to seabed')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
-        elif imu.y > self.depth_range[0]:
-            print('Drifted far above target')
-            self.flush_commands = 0
-            self.finished = True
-            self.complete = False
         else:
             self.trajectory.append([imu.x, imu.y, imu.z])
         return
@@ -200,7 +194,28 @@ class dqn_controller(Node):
         return imu.roll
     
     def depth_callback(self, depth):
-        self.relative_depth = self.target_depth + depth.data
+        
+        #finished flag
+        if self.finished:
+            return
+        
+        #flush queue
+        if self.flush_depth < self.flush_steps:
+            self.flush_depth += 1
+            return
+        
+        if -depth.data < self.depth_range[1]:
+            print('Drifted close to seabed')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
+        elif -depth.data > self.depth_range[0]:
+            print('Drifted far above target')
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
+        else:
+            self.relative_depth = self.target_depth + depth.data
         return
 
     def segmentation_callback(self, seg_map):
@@ -233,76 +248,82 @@ class dqn_controller(Node):
             return
 
         seg_map = np.array(seg_map.data).reshape(self.img_size)
-        if len(self.image_history) < self.history_size:
-            self.depth_history.append(self.relative_depth)
-            self.image_history.append(seg_map)
+        #check for empty input from vision module
+        if seg_map.sum() < self.detection_threshold:
+            self.empty_state_counter += 1
         else:
-            self.image_history.pop(0)
-            self.image_history.append(seg_map)
-            self.depth_history.pop(0)
-            self.depth_history.append(self.relative_depth)
+            self.empty_state_counter = 0
+        
+        #if nothing has been detected in empty_state_max frames then reset
+        if self.empty_state_counter >= self.empty_state_max:
+            print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
+            return
+        
+        if self.duration > self.max_duration:
+            print("Duration Reached")
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = True
+            return
+        self.duration += 1
+        
+        self.depth_history.append(self.relative_depth)
+        self.image_history.append(seg_map)
+        if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
             ns = np.array(self.image_history)
             nsd = np.array(self.depth_history)
-            
-            #check for empty input from vision module
-            if ns.sum() < self.detection_threshold:
-                self.empty_state_counter += 1
-            else:
-                self.empty_state_counter = 0
-            
-            #if nothing has been detected in empty_state_max frames then reset
-            if self.empty_state_counter >= self.empty_state_max:
-                print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
-                self.flush_commands = 0
-                self.finished = True
-                self.complete = False
-                return
-            
-            if self.duration > self.max_duration:
-                print("Duration Reached")
-                self.flush_commands = 0
-                self.finished = True
-                self.complete = True
-                return
-            self.duration += 1
-           
+            nsa = np.array(self.action_history)
+  
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = reward_calculation(seg_map, self.relative_depth, self.positive_template, self.negative_template, self.detection_threshold)
+            self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+
+            reward = reward_calculation(seg_map, self.relative_depth, self.roi_detection_threshold, self.mean_importance)
+
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
 
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.action = self.dqn.select_eval_action(self.next_state, self.next_state_depths)
+                self.action = self.dqn.select_eval_action(self.next_state, self.next_state_depths, self.next_state_actions)
             else:
-                if self.state is not None and self.action is not None and self.state_depths is not None:
-                    self.dqn.memory.push(self.state, self.state_depths, self.action, self.next_state, self.next_state_depths, self.reward)
-                    self.erm.push(self.state, self.state_depths, self.action, self.next_state, self.next_state_depths, self.reward)
+                if self.state is not None and self.state_depths is not None and self.state_actions is not None:
+                    self.dqn.memory.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
+                    self.erm.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
 
-                self.action = self.dqn.select_action(self.next_state, self.next_state_depths)       
+                self.action = self.dqn.select_action(self.next_state, self.next_state_depths, self.next_state_actions)       
                 self.state = self.next_state
                 self.state_depths = self.next_state_depths
+                self.state_actions = self.next_state_actions
 
-                # Perform one step of the optimization (on the policy network)
-                if self.dqn.steps_done % 1 == 0:
-                    loss = self.dqn.optimize()
-                    if loss is not None:        
-                        self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
-                    # Soft update of the target network's weights
-                    # θ′ ← τ θ + (1 −τ )θ′
-                    target_net_state_dict = self.dqn.target_net.state_dict()
-                    policy_net_state_dict = self.dqn.policy_net.state_dict()
-                    for key in policy_net_state_dict:
-                        target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
-                    self.dqn.target_net.load_state_dict(target_net_state_dict)
+            self.image_history = self.image_history[self.frames_to_skip:]
+            self.depth_history = self.depth_history[self.frames_to_skip:]
+            self.action_history = self.action_history[self.frames_to_skip:]
 
-            action_idx = self.action.detach().cpu().numpy()[0][0]
-            self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
-            self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
-            self.command.speed = hyperparams.speed_ #fixed speed
-            self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-            self.command_publisher.publish(self.command)
+        if not self.evaluate:
+            # Perform one step of the optimization (on the policy network)
+            if self.dqn.steps_done % 1 == 0:
+                loss = self.dqn.optimize()
+                if loss is not None:        
+                    self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
+                # Soft update of the target network's weights
+                # θ′ ← τ θ + (1 −τ )θ′
+                target_net_state_dict = self.dqn.target_net.state_dict()
+                policy_net_state_dict = self.dqn.policy_net.state_dict()
+                for key in policy_net_state_dict:
+                    target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
+                self.dqn.target_net.load_state_dict(target_net_state_dict)
+
+        action_idx = self.action.detach().cpu().numpy()[0][0]
+        self.action_history.append(action_idx)
+        self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
+        self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
+        self.command.speed = hyperparams.speed_ #fixed speed
+        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
+        self.command_publisher.publish(self.command)
         return 
         
     def finish(self):
@@ -326,10 +347,11 @@ class dqn_controller(Node):
         else:
             self.writer.add_scalar('Episode Rewards (Train)', np.sum(self.episode_rewards), self.episode)
 
-        if not self.complete:
-            if self.state is not None and self.state_depths is not None and not self.evaluate:
-                self.dqn.memory.push(self.state, self.state_depths, self.action, None, None, self.reward)
-                self.erm.push(self.state, self.state_depths, self.action, None, None, self.reward)
+        self.writer.add_scalar('Duration', self.duration, self.episode)
+
+        if self.state is not None and self.state_depths is not None and self.state_actions is not None and not self.evaluate and not self.complete:
+            self.dqn.memory.push(self.state, self.state_depths, self.state_actions, self.action, None, None, None, self.reward)
+            self.erm.push(self.state, self.state_depths, self.state_actions, self.action, None, None, None, self.reward)
 
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
@@ -372,7 +394,7 @@ class dqn_controller(Node):
             random_position = random_starting_position() 
             starting_pose.position.x = random_position[0]
             starting_pose.position.z = random_position[1]                               
-            starting_pose.position.y = np.random.uniform(self.target_depth-2, self.target_depth+2)
+            starting_pose.position.y = np.random.uniform(self.target_depth-1, self.target_depth+1)
         else:
             starting_pose.position.x = 70.0
             starting_pose.position.z = -0.3                               
@@ -400,16 +422,20 @@ class dqn_controller(Node):
         self.next_state = None
         self.state_depths = None
         self.next_state_depths = None
-        self.action = None
+        self.state_actions = None
+        self.next_state_actions = None
+        self.action = torch.tensor([[4]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.image_history = []
         self.depth_history = []
+        self.action_history = [4]
 
         #reset flush queues 
         self.flush_commands = self.flush_steps
         self.zero_commands = 0
         self.flush_imu = 0
         self.flush_segmentation = 0
+        self.flush_depth = 0
 
         #reset counters
         self.empty_state_counter = 0

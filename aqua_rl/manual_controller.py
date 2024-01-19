@@ -1,105 +1,165 @@
 import rclpy
+import torch
+import numpy as np 
+from pynput import keyboard
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
-from aqua_rl.control.PID import AnglePID
-from sensor_msgs.msg import CompressedImage
-import os 
-from pynput import keyboard
-import numpy as np 
-import cv2 
+from std_msgs.msg import UInt8MultiArray, Float32
+from aqua_rl.control.PID import AnglePID, PID
+from aqua_rl.control.DQN import ReplayMemory
+from aqua_rl.helpers import reward_calculation
+from aqua_rl import hyperparams
+
 
 class manual_controller(Node):
     def __init__(self):
         super().__init__('manual_controller')
-        self.command_publisher = self.create_publisher(Command, '/a13/command', 10)
-        self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, 10)
-        self.camera_subscriber = self.create_subscription(
-            CompressedImage, 
-            '/camera/back/image_raw/compressed', 
-            self.camera_callback, 
-            10)
-        self.roll_pid = AnglePID(target = 0.0, gains = [2.75, 0.0, 3.75], reverse=True)
-        self.pitch_pid = AnglePID(target = 0.0, gains = [0.5181, 0.0, 0.9])
+        #hyperparams
+        self.queue_size = hyperparams.queue_size_
+        self.roll_gains = hyperparams.roll_gains_
+        self.history_size = hyperparams.history_size_
+        self.pitch_limit = hyperparams.pitch_limit_
+        self.yaw_limit = hyperparams.yaw_limit_
+        self.yaw_action_space = hyperparams.yaw_action_space_
+        self.pitch_action_space = hyperparams.pitch_action_space_
+        self.img_size = hyperparams.img_size_
+        self.depth_range = hyperparams.depth_range_
+        self.target_depth = hyperparams.target_depth_
+        self.frames_to_skip = hyperparams.frames_to_skip_
+        self.roi_detection_threshold = hyperparams.roi_detection_threshold_
+        self.mean_importance = hyperparams.mean_importance_
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        #subscribers and publishers
+        self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
+        self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
+        self.segmentation_subscriber = self.create_subscription(
+            UInt8MultiArray, 
+            '/segmentation', 
+            self.segmentation_callback, 
+            self.queue_size)
+        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
+
+        self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
+        self.pitch_pid = PID(target = 0.0, gains = [0.005, 0.0, 0.175])
+
         self.measured_roll_angle = 0.0
-        self.measured_pitch_angle = 0.0
-        self.dataset_path = 'src/aqua_rl/rope_dataset/'
-        self.dataset_size = len(os.listdir(self.dataset_path))
+        self.relative_depth = None
+        
+        #dqn controller for yaw and pitch 
+        self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
+        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
+        self.state = None
+        self.next_state = None
+        self.state_depths = None
+        self.next_state_depths = None
+        self.state_actions = None
+        self.next_state_actions = None
+        self.action = torch.tensor([[4]], device=self.device, dtype=torch.long)
+        self.reward = None
+        self.image_history = []
+        self.depth_history = []
+        self.action_history = [4]
+        self.episode_rewards = []
+        self.erm = ReplayMemory(60000)
+
+        #initialize command
         self.command = Command()
-        self.command.speed = 0.25 #fixed speed
+        self.command.speed = 0.0 
         self.command.roll = 0.0
         self.command.pitch = 0.0
         self.command.yaw = 0.0
         self.command.heave = 0.0
+
+        self.yaw_action_idx = 1
+        self.pitch_action_idx = 1
+
         self.listener = keyboard.Listener(on_press=self.get_command)
         self.listener.start()
         self.recieved_command = False
-        self.save_img = False
-        cv2.namedWindow("Downward Camera", cv2.WINDOW_AUTOSIZE)
         print('Initialized: manual controller ')
   
     def get_command(self, key):
         try:
-            if key.char == 'a': # hard yaw left
-                self.command.yaw = 0.75
-                self.recieved_command = True
-            elif key.char == 's': # soft yaw left
-                self.command.yaw = 0.25
-                self.recieved_command = True
-            elif key.char == 'd': # soft yaw right
-                self.command.yaw = -0.25
-                self.recieved_command = True
-            elif key.char == 'f': # hard yaw right
-                self.command.yaw = -0.75
-                self.recieved_command = True
-            elif key.char == 'k':
-                self.command.speed = np.clip(self.command.speed - 0.25, 0.25, 1.0)
-            elif key.char == 'l':
-                self.command.speed = np.clip(self.command.speed + 0.25, 0.25, 1.0)
+            if key.char == 'a': # yaw left
+                self.yaw_action_idx = 2
+            elif key.char == 'd': # yaw right
+                self.yaw_action_idx = 0
+            else:
+                self.yaw_action_idx = 1 #straight
         except AttributeError:
-            if key == keyboard.Key.up: # heave up
-                self.command.heave = 0.25
-                self.recieved_command = True
-            elif key == keyboard.Key.down: # heave down
-                self.command.heave = -0.25
-                self.recieved_command = True
-            elif key == keyboard.Key.space: # save image
-                self.save_img = True
+            if key == keyboard.Key.space: # save erm
+                torch.save({
+                    'memory': self.erm
+                }, './src/aqua_rl/expert_erm.pt')
+                print('Saved ERM. Please kill node now')
+                input()
+                return
         return 
 
-        
     def imu_callback(self, imu):
         self.measured_roll_angle = self.calculate_roll(imu)
-        self.measured_pitch_angle = self.calculate_pitch(imu)
-        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-        self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
-        if self.recieved_command:
-            self.recieved_command = False
-        else:
-            self.command.yaw = 0.0
-            self.command.heave = 0.0
-        self.command_publisher.publish(self.command)
         return
 
     def calculate_roll(self, imu):
         return imu.roll
     
-    def calculate_pitch(self, imu):
-        return imu.pitch
-    
-    def camera_callback(self, msg):
-        img = self.load_img(msg)
-        cv2.imshow("Downward Camera", img)
-        key_ = cv2.waitKey(1)
-        if self.save_img:
-            cv2.imwrite(self.dataset_path + str(self.dataset_size) + '.jpg', img)
-            print('Saved Image. Dataset Size: ' + str(self.dataset_size))
-            self.dataset_size += 1
-            self.save_img = False
+    def depth_callback(self, depth):
+        self.relative_depth = self.target_depth + depth.data
+        return
 
-    def load_img(self, compressed_img):
-        img = np.fromstring(compressed_img.data.tobytes(), np.uint8)
-        img = cv2.imdecode(img, cv2.IMREAD_COLOR) 
-        return img
+    def segmentation_callback(self, seg_map):
+
+        #exit if depth has not been measured
+        if self.relative_depth is None:
+            return 
+        
+        seg_map = np.array(seg_map.data).reshape(self.img_size)
+               
+        self.depth_history.append(self.relative_depth)
+        self.image_history.append(seg_map)
+        if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
+            ns = np.array(self.image_history)
+            nsd = np.array(self.depth_history)
+            nsa = np.array(self.action_history)
+                                  
+            self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.device).unsqueeze(0)
+            self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.device).unsqueeze(0)
+            self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.device).unsqueeze(0)
+
+            reward = reward_calculation(seg_map, self.relative_depth, self.roi_detection_threshold, self.mean_importance)
+
+            self.episode_rewards.append(reward)
+            self.reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
+
+            if self.state is not None and self.state_depths is not None and self.state_actions is not None:
+                self.erm.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
+            
+            self.pitch_action_idx = self.discretize(self.pitch_pid.control(self.relative_depth), self.pitch_actions)
+            a = int(self.pitch_action_idx*self.yaw_action_space) + self.yaw_action_idx
+            a = torch.tensor([[a]], device=self.device, dtype=torch.long)
+            self.action = a    
+            self.state = self.next_state
+            self.state_depths = self.next_state_depths
+            self.state_actions = self.next_state_actions
+
+            self.image_history = self.image_history[self.frames_to_skip:]
+            self.depth_history = self.depth_history[self.frames_to_skip:]
+            self.action_history = self.action_history[self.frames_to_skip:]
+  
+        action_idx = self.action.detach().cpu().numpy()[0][0]
+        self.action_history.append(action_idx)
+        self.command.pitch = self.pitch_actions[int(action_idx/self.yaw_action_space)]
+        self.command.yaw = self.yaw_actions[action_idx % self.yaw_action_space]            
+        self.command.speed = hyperparams.speed_ #fixed speed
+        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
+        self.command_publisher.publish(self.command)
+        return 
+    
+    def discretize(self, v, l):
+        index = np.argmin(np.abs(np.subtract(l,v)))
+        return index
+
 
 def main(args=None):
     rclpy.init(args=args)

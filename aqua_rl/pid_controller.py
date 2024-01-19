@@ -1,6 +1,5 @@
 import rclpy
 import numpy as np 
-import torch
 import os
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose
@@ -24,6 +23,7 @@ class pid_controller(Node):
         self.pitch_action_space = hyperparams.pitch_action_space_
         self.target_depth = hyperparams.target_depth_
         self.history_size = hyperparams.history_size_
+        self.frames_to_skip = hyperparams.frames_to_skip_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -44,6 +44,8 @@ class pid_controller(Node):
 
         self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
         self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
+        self.yaw_action_idx = 1
+        self.pitch_action_idx = 1
 
         #initialize command
         self.command = Command()
@@ -56,20 +58,23 @@ class pid_controller(Node):
         #state and depth history
         self.image_history = []
         self.depth_history = []
+        self.action_history = [4]
+        self.action = 4
         self.state = None
         self.state_depths = None
-        self.action = None
-
+        self.state_actions = None
+        
         self.save_expert_data = True
         self.expert_dataset_path = 'src/aqua_rl/pid_expert/'
         if not os.path.exists(self.expert_dataset_path):
             os.mkdir(self.expert_dataset_path)
-            os.mkdir(os.path.join(self.expert_dataset_path, 'states'))
-            os.mkdir(os.path.join(self.expert_dataset_path, 'depths'))
+            os.mkdir(os.path.join(self.expert_dataset_path, 'state'))
+            os.mkdir(os.path.join(self.expert_dataset_path, 'state_depths'))
+            os.mkdir(os.path.join(self.expert_dataset_path, 'state_actions'))
             os.mkdir(os.path.join(self.expert_dataset_path, 'actions'))
             self.num_samples = 0
         else:
-            self.num_samples = len(os.listdir(os.path.join(self.expert_dataset_path, 'states/')))
+            self.num_samples = len(os.listdir(os.path.join(self.expert_dataset_path, 'state/')))
             print('Samples collected: ', self.num_samples)
 
         #init kalman filter for tracking waypoint
@@ -82,9 +87,7 @@ class pid_controller(Node):
         self.kalman.R = 1 #measurement noise in px
         self.kalman.Q = Q_discrete_white_noise(dim=2, dt=0.02, var=0.13)
         self.current_error = 0.0
-
-        self.saved = False
-                             
+                            
         print('Initialized: PID controller')
   
     def imu_callback(self, imu):
@@ -97,8 +100,7 @@ class pid_controller(Node):
 
     def calculate_roll(self, imu):
         return imu.roll
-    
-    
+        
     def segmentation_callback(self, seg_map):
         
         #return if depth or roll angle has not been measured
@@ -106,14 +108,12 @@ class pid_controller(Node):
             return
         
         seg_map = np.array(seg_map.data).reshape(self.img_size)
-        if len(self.image_history) < self.history_size:
-            self.image_history.append(seg_map)
-            self.depth_history.append(self.relative_depth)
-        else:
-            self.image_history.pop(0)
-            self.image_history.append(seg_map)
-            self.depth_history.pop(0)
-            self.depth_history.append(self.relative_depth)
+        self.depth_history.append(self.relative_depth)
+        self.image_history.append(seg_map)
+        if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
+            self.state = np.array(self.image_history)
+            self.state_depths = np.array(self.depth_history)
+            self.state_actions = np.array(self.action_history)
 
             #ransac on mask
             try:
@@ -129,7 +129,7 @@ class pid_controller(Node):
             self.kalman.predict()
 
             #select waypoint from candidates. select higher point. 
-            #in horizontal pipe case this may cause switching
+            #in horizontal case this may cause switching
             if np.abs(errors[0]) < np.abs(errors[1]):
                 er = errors[0]
             else:
@@ -141,26 +141,32 @@ class pid_controller(Node):
             else:
                 self.current_error = er
             
-            self.state = np.array(self.image_history)
-            self.state_depths = np.array(self.depth_history)
             self.yaw_action_idx = self.discretize(self.yaw_pid.control(self.current_error), self.yaw_actions)
             self.pitch_action_idx = self.discretize(self.pitch_pid.control(self.relative_depth), self.pitch_actions)
             self.action = int(self.pitch_action_idx*self.yaw_action_space) + self.yaw_action_idx
+            
             if self.save_expert_data:
-                with open(os.path.join(self.expert_dataset_path, 'states') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as s:
-                    np.save(s, self.state)
-                with open(os.path.join(self.expert_dataset_path, 'depths') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as d:
-                    np.save(d, self.state_depths)
+                with open(os.path.join(self.expert_dataset_path, 'state') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as s:
+                    np.save(s,self.state)
+                with open(os.path.join(self.expert_dataset_path, 'state_depths') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as sd:
+                    np.save(sd, self.state_depths)
+                with open(os.path.join(self.expert_dataset_path, 'state_actions') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as sa:
+                    np.save(sa, self.state_actions)
                 with open(os.path.join(self.expert_dataset_path, 'actions') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as a:
                     np.save(a, self.action)
                 self.num_samples += 1
-                
-            self.command.speed = 0.25 #fixed speed
-            self.command.yaw = self.yaw_actions[self.yaw_action_idx]
-            self.command.pitch = self.pitch_actions[self.pitch_action_idx]
-            self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-            self.command.heave = 0.0
-            self.command_publisher.publish(self.command)
+            
+            self.image_history = self.image_history[self.frames_to_skip:]
+            self.depth_history = self.depth_history[self.frames_to_skip:]
+            self.action_history = self.action_history[self.frames_to_skip:]
+        
+        self.action_history.append(self.action)
+        self.command.speed = 0.25 #fixed speed
+        self.command.yaw = self.yaw_actions[self.yaw_action_idx]
+        self.command.pitch = self.pitch_actions[self.pitch_action_idx]
+        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
+        self.command.heave = 0.0
+        self.command_publisher.publish(self.command)
 
         return
 
@@ -170,10 +176,8 @@ class pid_controller(Node):
         grid = seg_map[:n * block_size[0], :n * block_size[1]].reshape(n, block_size[0], n, block_size[1]).sum(axis=(1, 3))
         #define threshold number of pixels
         n_thresh = thresh * block_size[0] * block_size[1]
-
         # populate the grid based on the threshold
         grid = (grid > n_thresh).astype(int)
-
         #error = (5 - np.sum(grid[:,2])) * (0.1*((np.sum(grid[:,0:2])) - (np.sum(grid[:,3:5]))))
         return grid
     

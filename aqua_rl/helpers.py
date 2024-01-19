@@ -1,64 +1,49 @@
 import numpy as np
 
-def define_positive_template(img_size):
-    t = np.zeros(img_size)
-    half = int(img_size[1]/2)
-    t[:,half-2:half+2] = 1
-    return t.astype(np.uint8)
+def vertical_alignment_score(mask, mi):
+    hw = mask.shape[1]/2
+    column_indices = np.where(np.any(mask, axis=0))[0]
+    var = np.var(column_indices)
+    d = np.abs(np.mean(column_indices) - hw)/hw
+    score = (1 - d*mi) / (1 + var)
+    return score
 
-def define_negative_template(img_size):
-    t = np.zeros(img_size)
-    half = int(img_size[0]/2)
-    t[half-2:half+2,:] = 1
-    return t.astype(np.uint8)
-
-def define_float_template(img_size):
-    t = np.zeros(img_size)
-    hw = int(img_size[1]/2)
-    hh = int(img_size[0]/2)
-    t[:,hw-1:hw+1] = 1
-    t[0:hh, hw-6:hw-1] = 0.25
-    t[0:hh, hw+1:hw+6] = 0.25
-    t[0:int(hh*2/3), hw-12:hw-6] = 0.15
-    t[0:int(hh*2/3), hw+6:hw+12] = 0.15
-    t[0:int(hh*2/4), :hw-12] = 0.1
-    t[0:int(hh*2/4), hw+12:] = 0.1
-    return t 
-
-def float_reward_calculation(seg_map, template, relative_depth=0):
-    if np.abs(relative_depth) < 2:
-        return np.sum(np.multiply(seg_map, template))/64
-    else:
-        return -0.25
-
-def reward_calculation(seg_map, relative_depth, positive_template, negative_template, detection_threshold):
-    # Calculate intersection and union
-    pi = np.logical_and(seg_map, positive_template)
-    pu = np.logical_or(seg_map, positive_template)
-    positive_iou = np.sum(pi) / np.sum(pu)
-
-    # Calculate intersection and union
-    ni = np.logical_and(seg_map, negative_template)
-    nu = np.logical_or(seg_map, negative_template)
-    negative_iou = np.sum(ni) / np.sum(nu)
-
-    if positive_iou > negative_iou:
-        r = positive_iou
-    else:
-        r = negative_iou * -2
-
+def reward_calculation(seg_map, relative_depth, detection_threshold, mi):
     if np.sum(seg_map) > detection_threshold:
-        bonus = 0.05
+        r = vertical_alignment_score(seg_map, mi)
     else:
-        bonus = 0.0
-
-    if np.abs(relative_depth) < 2:
-        return r + bonus
-    else:
-        return -0.25
+        r = -0.5
     
+    if np.abs(relative_depth) < 2:
+        d = 0.0
+    else:
+        d = -0.5
+    
+    return r + d
+   
 def random_starting_position():
     starting_positions = [[70.0, -0.3],
-                          [32.0, 34.0],
-                          [3.0, -22.0]]
+                          [60.0, -0.3],
+                          [32.0, 31.0],
+                          [-5.0, -25.0],
+                          [-17.0, -16.0]]
     return starting_positions[np.random.randint(0,len(starting_positions))]
+
+def adv_mapping(action):
+    match action:
+        case 0:
+            return (0,0,0)
+        case 1:
+            return (-1,0,0)
+        case 2:
+            return (1,0,0)
+        case 3:
+            return (0,-1,0)
+        case 4:
+            return (0,1,0)
+        case 5:
+            return (0,0,-1)
+        case 6:
+            return (0,0,1)
+        case _:
+            raise IndexError

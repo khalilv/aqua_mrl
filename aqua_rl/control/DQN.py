@@ -8,7 +8,7 @@ import numpy as np
 from collections import namedtuple, deque
 
 Transition = namedtuple('Transition',
-                        ('state', 'state_depths', 'action', 'next_state', 'next_state_depths', 'reward'))
+                        ('state', 'state_depths', 'state_actions', 'action', 'next_state', 'next_state_depths', 'next_state_actions', 'reward'))
 
 class ReplayMemory(object):
 
@@ -40,36 +40,46 @@ class DQNNetwork(nn.Module):
         )
 
         self.depth_fc = nn.Sequential(
-            nn.Linear(in_features= history, out_features= 128),
+            nn.Linear(in_features= history, out_features= 256),
+            nn.ReLU(),
+            nn.Linear(in_features= 256, out_features= 128),
+            nn.ReLU(),
+        )
+
+        self.actions_fc = nn.Sequential(
+            nn.Linear(in_features= history, out_features= 256),
+            nn.ReLU(),
+            nn.Linear(in_features= 256, out_features= 128),
             nn.ReLU(),
         )
 
         self.fc = nn.Sequential(
-            nn.Linear(in_features= 3 * 3 * 64 + 128, out_features=256),
+            nn.Linear(in_features= 3 * 3 * 64 + 128 + 128, out_features=256),
             nn.ReLU(),
             nn.Linear(in_features= 256, out_features=n_actions)
         )
 
     # Called with either one element to determine next action, or a batch
     # during optimization.
-    def forward(self, s, d):
+    def forward(self, s, d, a):
         s = self.conv(s)
         s = s.reshape((-1, 3 * 3 * 64))
         d = self.depth_fc(d)
-        s = torch.cat((s, d), dim= 1)
+        a = self.actions_fc(a)
+        s = torch.cat((s, d, a), dim= 1)
         s = self.fc(s)
         return s  
     
 class DQN:
 
     def __init__(self, n_actions, history_size) -> None:
-        self.BATCH_SIZE = 128
+        self.BATCH_SIZE = 32
         self.GAMMA = 0.99
-        self.EPS_START = 0.5
+        self.EPS_START = 0.8
         self.EPS_END = 0.1
-        self.EPS_DECAY = 100000
+        self.EPS_DECAY = 60000
         self.TAU = 0.002
-        LR = 1e-4
+        LR = 1e-3
         self.MEMORY_SIZE = 60000
         self.n_actions = n_actions
         self.history_size = history_size
@@ -81,27 +91,27 @@ class DQN:
         self.memory = ReplayMemory(self.MEMORY_SIZE)
         self.steps_done = 0
         
-    def select_action(self, s, d):
+    def select_action(self, s, d, a):
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
             math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        self.steps_done += 1
         if sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return the largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
-                return self.policy_net(s, d).max(1)[1].view(1, 1)
+                return self.policy_net(s, d, a).max(1)[1].view(1, 1)
         else:
             return torch.tensor([[int(np.random.randint(0,self.n_actions))]], device=self.device, dtype=torch.long)
     
-    def select_eval_action(self, s, d):
+    def select_eval_action(self, s, d, a):
         with torch.no_grad():
-            return self.target_net(s, d).max(1)[1].view(1, 1)
+            return self.target_net(s, d, a).max(1)[1].view(1, 1)
 
     def optimize(self):
         if len(self.memory) < self.BATCH_SIZE:
             return None
+        self.steps_done += 1
         transitions = self.memory.sample(self.BATCH_SIZE)
         batch = Transition(*zip(*transitions))
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
@@ -110,16 +120,19 @@ class DQN:
                                                     if s is not None])
         non_final_next_state_depths = torch.cat([s for s in batch.next_state_depths
                                             if s is not None])
+        non_final_next_state_actions = torch.cat([s for s in batch.next_state_actions
+                                            if s is not None])
         
         state_batch = torch.cat(batch.state) #S
         state_depths_batch = torch.cat(batch.state_depths) #S
+        state_actions_batch = torch.cat(batch.state_actions) #S
         action_batch = torch.cat(batch.action) #A
         reward_batch = torch.cat(batch.reward) #R
 
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
-        state_action_values = self.policy_net(state_batch, state_depths_batch).gather(1, action_batch) #Qp(S_t,A)
+        state_action_values = self.policy_net(state_batch, state_depths_batch, state_actions_batch).gather(1, action_batch) #Qp(S_t,A)
 
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based
@@ -129,10 +142,10 @@ class DQN:
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
         with torch.no_grad():
             #DQN
-            #next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).max(1)[0] #max_a Qt(S_t+1, a)
+            #next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths, non_final_next_state_actions).max(1)[0] #max_a Qt(S_t+1, a)
 
             #DDQN
-            next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths).gather(1, self.policy_net(non_final_next_states, non_final_next_state_depths).argmax(1).reshape(1,-1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+            next_state_values[non_final_mask] = self.target_net(non_final_next_states, non_final_next_state_depths, non_final_next_state_actions).gather(1, self.policy_net(non_final_next_states, non_final_next_state_depths, non_final_next_state_actions).argmax(1).reshape(1,-1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
         
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch  #R + gamma * target
