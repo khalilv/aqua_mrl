@@ -14,9 +14,15 @@ from tqdm import tqdm
 import os
 import argparse
 
+import segmentation_models_pytorch as smp
+
 # data transformations
 data_transforms = {
-    'train': A.Compose([
+    'train': A.Compose([A.Resize(
+                320,
+                416,
+                always_apply=True,
+            ),
         A.HorizontalFlip(p=0.5),
         A.VerticalFlip(p=0.5),
         A.ShiftScaleRotate(shift_limit=0.0, scale_limit=0.0,
@@ -24,7 +30,11 @@ data_transforms = {
         A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ]),
-    'valid': A.Compose([
+    'valid': A.Compose([A.Resize(
+                320,
+                416,
+                always_apply=True,
+            ),
         A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ])
@@ -43,16 +53,23 @@ def update_metrics(metrics, outputs, labels):
     return
 
 
-def load_model(n_classes):
-    model = models.segmentation.deeplabv3_mobilenet_v3_large(
-        pretrained=True, progress=True)
-    # freeze weights
-    for param in model.parameters():
-        param.requires_grad = False
-    # replace classifier
-    model.classifier = DeepLabHead(960, num_classes=n_classes)
+def load_model(n_classes, encoder_name = None):
+    if encoder_name is None:
+       model = models.segmentation.deeplabv3_mobilenet_v3_large(
+           pretrained=True, progress=True)
+       # freeze weights
+       for param in model.parameters():
+           param.requires_grad = False
+       # replace classifier
+       model.classifier = DeepLabHead(960, num_classes=n_classes)
+    else:
+        model = smp.Unet(
+            encoder_name = encoder_name,      # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights = "imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+            in_channels=3,                    # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            classes=n_classes,                # model output channels (number of classes in your dataset)
+        )
     return model
-
 
 def train(args=None):
     root = args.dataset_root
@@ -60,10 +77,11 @@ def train(args=None):
     batch_size = args.batch_size
     analyze = args.analyze
     epochs = args.epochs
+    encoder_name = args.encoder_name
     metrics = []
     best_f1 = -1
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = load_model(2)
+    model = load_model(2, encoder_name)
     model.to(device)
     summary(model)
     datasets = {x: SegmentationDataset(root=root,
@@ -121,7 +139,11 @@ def train(args=None):
             masks = sample['mask'].to(device=device, dtype=torch.int64)
 
             optimizer.zero_grad()  # clear gradients
-            outputs = model(features)['out']  # run model on inputs
+            if encoder_name is None:
+                outputs = model(features)['out']  # run model on inputs
+
+            else:
+                outputs = model(features)#['out']
 
             # #display outputs
             # for ind,out in enumerate(outputs):
@@ -192,5 +214,7 @@ if __name__ == '__main__':
                         help='number of epochs to train for')
     parser.add_argument('--analyze', default=False, type=bool,
                         help='analyze images from batch')
+    parser.add_argument('--encoder_name', default=None, type=str,
+                        help='encoder name')
     args = parser.parse_args()
     train(args)
