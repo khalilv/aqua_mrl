@@ -120,7 +120,6 @@ class dqn_controller_adv(Node):
             self.pro_save_path = os.path.join(self.root_path, 'weights')
             pro_last_checkpoint = max(sorted(os.listdir(self.pro_save_path)))
             pro_checkpoint = torch.load(os.path.join(self.pro_save_path, pro_last_checkpoint), map_location=self.dqn.device)
-            print(pro_last_checkpoint)
             self.dqn.policy_net.load_state_dict(pro_checkpoint['model_state_dict_policy'], strict=True)
             self.dqn.target_net.load_state_dict(pro_checkpoint['model_state_dict_target'], strict=True)
             self.dqn.optimizer.load_state_dict(pro_checkpoint['optimizer_state_dict'])
