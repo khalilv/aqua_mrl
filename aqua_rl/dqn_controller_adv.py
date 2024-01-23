@@ -123,6 +123,7 @@ class dqn_controller_adv(Node):
             self.dqn.target_net.load_state_dict(pro_checkpoint['model_state_dict_target'], strict=True)
             self.dqn.optimizer.load_state_dict(pro_checkpoint['optimizer_state_dict'])
             self.dqn.steps_done = pro_checkpoint['training_steps']
+            print('Protagonist loaded from: ', pro_last_checkpoint)
             
             if self.load_erm:
                 print('Loading ERM from previous experience. Note this may take time')
