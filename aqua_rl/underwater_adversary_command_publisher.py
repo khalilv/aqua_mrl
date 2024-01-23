@@ -13,7 +13,7 @@ class underwater_adversary_command_publisher(Node):
 
         #hyperparams
         self.queue_size = hyperparams.queue_size_
-        self.adv_action_space = hyperparams.yaw_action_space_
+        self.adv_action_space = hyperparams.adv_action_space_
         self.adv_madnitude_x = hyperparams.adv_magnitude_x_
         self.adv_madnitude_y = hyperparams.adv_magnitude_y_
         self.adv_madnitude_z = hyperparams.adv_magnitude_z_

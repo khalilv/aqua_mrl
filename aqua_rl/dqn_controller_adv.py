@@ -15,9 +15,9 @@ from aqua_rl.helpers import reward_calculation, random_starting_position, adv_ma
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
-class dqn_controller(Node):
+class dqn_controller_adv(Node):
     def __init__(self):
-        super().__init__('dqn_controller')
+        super().__init__('dqn_controller_adv')
 
         #hyperparams
         self.queue_size = hyperparams.queue_size_
@@ -91,11 +91,11 @@ class dqn_controller(Node):
         self.depth_history = []
         self.action_history = [4]
         self.episode_rewards = []
-        self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
 
         #adversary
         self.dqn_adv = DQN(self.adv_action_space, self.history_size)
         self.adv_action = torch.tensor([[0]], device=self.dqn_adv.device, dtype=torch.long)
+        self.erm = ReplayMemory(self.dqn_adv.MEMORY_SIZE)
 
         #trajectory recording
         self.trajectory = []
@@ -106,66 +106,45 @@ class dqn_controller(Node):
 
         self.root_path = 'src/aqua_rl/experiments/{}'.format(str(self.experiment_number))
         if os.path.exists(self.root_path):
-            self.save_path = os.path.join(self.root_path, 'weights')
-            self.save_memory_path = os.path.join(self.root_path, 'erm')
-            self.save_traj_path = os.path.join(self.root_path, 'trajectories')
-            self.writer = SummaryWriter(os.path.join(self.root_path, 'logs'))
+            self.save_path = os.path.join(self.root_path, 'weights/adv')
+            self.save_memory_path = os.path.join(self.root_path, 'erm/adv')
+            self.save_traj_path = os.path.join(self.root_path, 'trajectories/adv')
+            self.writer = SummaryWriter(os.path.join(self.root_path, 'logs/adv'))
             last_checkpoint = max(sorted(os.listdir(self.save_path)))
-            checkpoint = torch.load(os.path.join(self.save_path, last_checkpoint), map_location=self.dqn.device)
-            self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
-            self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
-            self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            self.dqn.steps_done = checkpoint['training_steps']
+            checkpoint = torch.load(os.path.join(self.save_path, last_checkpoint), map_location=self.dqn_adv.device)
+            self.dqn_adv.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
+            self.dqn_adv.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
+            self.dqn_adv.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.dqn_adv.steps_done = checkpoint['training_steps']
             
-            self.adv_save_path = os.path.join(self.root_path, 'weights/adv')
-            adv_last_checkpoint = max(sorted(os.listdir(self.adv_save_path)))
-            adv_checkpoint = torch.load(os.path.join(self.adv_save_path, adv_last_checkpoint), map_location=self.dqn_adv.device)
-            self.dqn_adv.policy_net.load_state_dict(adv_checkpoint['model_state_dict_policy'], strict=True)
-            self.dqn_adv.target_net.load_state_dict(adv_checkpoint['model_state_dict_target'], strict=True)
-            self.dqn_adv.optimizer.load_state_dict(adv_checkpoint['optimizer_state_dict'])
-            self.dqn_adv.steps_done = adv_checkpoint['training_steps']
+            self.pro_save_path = os.path.join(self.root_path, 'weights')
+            pro_last_checkpoint = max(sorted(os.listdir(self.pro_save_path)))
+            pro_checkpoint = torch.load(os.path.join(self.pro_save_path, pro_last_checkpoint), map_location=self.dqn.device)
+            print(pro_last_checkpoint)
+            self.dqn.policy_net.load_state_dict(pro_checkpoint['model_state_dict_policy'], strict=True)
+            self.dqn.target_net.load_state_dict(pro_checkpoint['model_state_dict_target'], strict=True)
+            self.dqn.optimizer.load_state_dict(pro_checkpoint['optimizer_state_dict'])
+            self.dqn.steps_done = pro_checkpoint['training_steps']
             
             if self.load_erm:
                 print('Loading ERM from previous experience. Note this may take time')
                 t0 = time()
                 for file_path in sorted(os.listdir(self.save_memory_path), reverse=True):
                     if os.path.isfile(os.path.join(self.save_memory_path, file_path)):
-                        if self.dqn.memory.__len__() < self.dqn.MEMORY_SIZE:
-                            memory = torch.load(os.path.join(self.save_memory_path, file_path), map_location=self.dqn.device)
+                        if self.dqn_adv.memory.__len__() < self.dqn_adv.MEMORY_SIZE:
+                            memory = torch.load(os.path.join(self.save_memory_path, file_path), map_location=self.dqn_adv.device)
                             erm = memory['memory']
-                            self.dqn.memory.memory += erm.memory
+                            self.dqn_adv.memory.memory += erm.memory
                 t1 = time()
-                print('ERM size: ', self.dqn.memory.__len__(), '. Time taken to load: ', t1 - t0)
+                print('ERM size: ', self.dqn_adv.memory.__len__(), '. Time taken to load: ', t1 - t0)
             else:
                 print('WARNING: weights loaded but starting from a fresh replay memory')
             
             self.episode = int(last_checkpoint[8:13]) + 1
             self.stop_episode = self.episode + self.train_for - 1
-            print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.dqn.steps_done)
+            print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.dqn_adv.steps_done)
         else:
-            print('WARNING: starting a new experiment as experiment {} does not exist'.format(str(self.experiment_number)))
-            os.mkdir(self.root_path)
-            os.mkdir(os.path.join(self.root_path, 'weights'))
-            os.mkdir(os.path.join(self.root_path, 'erm'))
-            os.mkdir(os.path.join(self.root_path, 'trajectories'))
-            os.mkdir(os.path.join(self.root_path, 'logs'))
-            os.mkdir(os.path.join(self.root_path, 'weights/adv'))
-            os.mkdir(os.path.join(self.root_path, 'erm/adv'))
-            os.mkdir(os.path.join(self.root_path, 'trajectories/adv'))
-            os.mkdir(os.path.join(self.root_path, 'logs/adv'))
-            self.save_path = os.path.join(self.root_path, 'weights')
-            self.save_memory_path = os.path.join(self.root_path, 'erm')
-            self.save_traj_path = os.path.join(self.root_path, 'trajectories')
-            self.writer = SummaryWriter(os.path.join(self.root_path, 'logs'))
-            self.episode = 0
-            self.stop_episode = self.episode + self.train_for
-            torch.save({
-                'training_steps': self.dqn_adv.steps_done,
-                'model_state_dict_policy': self.dqn_adv.policy_net.state_dict(),
-                'model_state_dict_target': self.dqn_adv.target_net.state_dict(),
-                'optimizer_state_dict': self.dqn_adv.optimizer.state_dict(),
-            }, self.save_path +  '/adv/episode_{}.pt'.format(str(self.episode).zfill(5)))
-            print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
+            raise Exception('ERROR: Experiment {} does not exist. Please train protagonist agent first.'.format(str(self.experiment_number)))
         
         #initialize command
         self.command = Command()
@@ -185,7 +164,7 @@ class dqn_controller(Node):
         #reset command
         self.reset_client = self.create_client(SetPosition, '/simulator/set_position')
         self.reset_req = SetPosition.Request()
-        print('Initialized: dqn controller')
+        print('Initialized: dqn controller adv')
 
     def imu_callback(self, imu):
         
@@ -306,49 +285,47 @@ class dqn_controller(Node):
             nsd = np.array(self.depth_history)
             nsa = np.array(self.action_history)
   
-            self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn_adv.device).unsqueeze(0)
+            self.next_state_depths = torch.tensor(nsd, dtype=torch.float32, device=self.dqn_adv.device).unsqueeze(0)
+            self.next_state_actions = torch.tensor(nsa, dtype=torch.float32, device=self.dqn_adv.device).unsqueeze(0)
 
             reward = reward_calculation(seg_map, self.relative_depth, self.roi_detection_threshold, self.mean_importance)
 
             self.episode_rewards.append(reward)
-            self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
+            self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn_adv.device)
 
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.action = self.dqn.select_eval_action(self.next_state, self.next_state_depths, self.next_state_actions)
+                self.adv_action = self.dqn_adv.select_eval_action(self.next_state, self.next_state_depths, self.next_state_actions)
             else:
                 if self.state is not None and self.state_depths is not None and self.state_actions is not None:
-                    self.dqn.memory.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
-                    self.erm.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
+                    self.dqn_adv.memory.push(self.state, self.state_depths, self.state_actions, self.adv_action, self.next_state, self.next_state_depths, self.next_state_actions, -1 * self.reward)
+                    self.erm.push(self.state, self.state_depths, self.state_actions, self.adv_action, self.next_state, self.next_state_depths, self.next_state_actions, -1 * self.reward)
 
-                self.action = self.dqn.select_action(self.next_state, self.next_state_depths, self.next_state_actions)       
+                self.adv_action = self.dqn_adv.select_action(self.next_state, self.next_state_depths, self.next_state_actions)       
                 self.state = self.next_state
                 self.state_depths = self.next_state_depths
                 self.state_actions = self.next_state_actions
 
-                #select adversary action
-                self.adv_action = self.dqn_adv.select_eval_action(self.next_state, self.next_state_depths, self.next_state_actions)
-                
+            self.action = self.dqn.select_eval_action(self.next_state, self.next_state_depths, self.next_state_actions)
             self.image_history = self.image_history[self.frames_to_skip:]
             self.depth_history = self.depth_history[self.frames_to_skip:]
             self.action_history = self.action_history[self.frames_to_skip:]
 
         if not self.evaluate:
             # Perform one step of the optimization (on the policy network)
-            if self.dqn.steps_done % 1 == 0:
-                loss = self.dqn.optimize()
+            if self.dqn_adv.steps_done % 1 == 0:
+                loss = self.dqn_adv.optimize()
                 if loss is not None:        
-                    self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
+                    self.writer.add_scalar('Loss', loss, self.dqn_adv.steps_done)
                 # Soft update of the target network's weights
                 # θ′ ← τ θ + (1 −τ )θ′
-                target_net_state_dict = self.dqn.target_net.state_dict()
-                policy_net_state_dict = self.dqn.policy_net.state_dict()
+                target_net_state_dict = self.dqn_adv.target_net.state_dict()
+                policy_net_state_dict = self.dqn_adv.policy_net.state_dict()
                 for key in policy_net_state_dict:
-                    target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
-                self.dqn.target_net.load_state_dict(target_net_state_dict)
-        
+                    target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn_adv.TAU + target_net_state_dict[key]*(1-self.dqn_adv.TAU)
+                self.dqn_adv.target_net.load_state_dict(target_net_state_dict)
+
         #adversary action
         x,y,z = adv_mapping(self.adv_action.detach().cpu().numpy()[0][0])
         self.adv_command.current_x = self.adv_madnitude_x * x
@@ -380,7 +357,7 @@ class dqn_controller(Node):
         
         self.episode_rewards = np.array(self.episode_rewards)
         print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
-        self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
+        self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn_adv.device)
         
         if self.evaluate:
             self.writer.add_scalar('Episode Rewards (Eval)', np.sum(self.episode_rewards), self.episode)
@@ -390,16 +367,16 @@ class dqn_controller(Node):
         self.writer.add_scalar('Duration', self.duration, self.episode)
 
         if self.state is not None and self.state_depths is not None and self.state_actions is not None and not self.evaluate and not self.complete:
-            self.dqn.memory.push(self.state, self.state_depths, self.state_actions, self.action, None, None, None, self.reward)
-            self.erm.push(self.state, self.state_depths, self.state_actions, self.action, None, None, None, self.reward)
+            self.dqn_adv.memory.push(self.state, self.state_depths, self.state_actions, self.adv_action, None, None, None, -1 * self.reward)
+            self.erm.push(self.state, self.state_depths, self.state_actions, self.adv_action, None, None, None, -1 * self.reward)
 
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
             torch.save({
-                'training_steps': self.dqn.steps_done,
-                'model_state_dict_policy': self.dqn.policy_net.state_dict(),
-                'model_state_dict_target': self.dqn.target_net.state_dict(),
-                'optimizer_state_dict': self.dqn.optimizer.state_dict(),
+                'training_steps': self.dqn_adv.steps_done,
+                'model_state_dict_policy': self.dqn_adv.policy_net.state_dict(),
+                'model_state_dict_target': self.dqn_adv.target_net.state_dict(),
+                'optimizer_state_dict': self.dqn_adv.optimizer.state_dict(),
             }, self.save_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)))
             torch.save({
                 'memory': self.erm
@@ -412,7 +389,7 @@ class dqn_controller(Node):
         if self.episode < self.stop_episode:
             self.reset()
         else:
-            subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py', shell=True)
+            subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter_adv.py', shell=True)
             self.popen_called = True
         return
 
@@ -465,7 +442,7 @@ class dqn_controller(Node):
         self.state_actions = None
         self.next_state_actions = None
         self.action = torch.tensor([[4]], device=self.dqn.device, dtype=torch.long)
-        self.adv_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)
+        self.adv_action = torch.tensor([[0]], device=self.dqn_adv.device, dtype=torch.long)
         self.reward = None
         self.image_history = []
         self.depth_history = []
@@ -492,7 +469,7 @@ class dqn_controller(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    node = dqn_controller()
+    node = dqn_controller_adv()
 
     rclpy.spin(node)
 

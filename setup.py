@@ -25,16 +25,14 @@ setup(
     entry_points={
         'console_scripts': [
             'underwater_adversary_command_publisher = aqua_rl.underwater_adversary_command_publisher:main',
-            # 'downward_camera_subscriber = aqua_rl.downward_camera_subscriber:main',
             'pid_controller = aqua_rl.pid_controller:main',
             'manual_controller = aqua_rl.manual_controller:main',
-            # 'yolo_detector = aqua_rl.yolo_detector:main',
             'segmentation = aqua_rl.segmentation:main',
             'pid_parameters = aqua_rl.pid_parameters:main',
             'pid_tuning = aqua_rl.pid_tuning:main',
             'dqn_controller = aqua_rl.dqn_controller:main',
             'dqn_controller_eval = aqua_rl.dqn_controller_eval:main',
-
+            'dqn_controller_adv = aqua_rl.dqn_controller_adv:main',
         ],
     },
 )

@@ -30,8 +30,8 @@ mean_importance_ = 0.25 #[0,1]
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 26
-train_for_ = 10
+experiment_number_ = 30
+train_for_ = 5
 frames_to_skip_ = 5
 
 #eval hyperparams
