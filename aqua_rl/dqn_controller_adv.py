@@ -37,7 +37,6 @@ class dqn_controller_adv(Node):
         self.experiment_number = hyperparams.experiment_number_
         self.train_for = hyperparams.train_for_
         self.detection_threshold = hyperparams.detection_threshold_
-        self.dirl_weights = hyperparams.dirl_weights_
         self.max_duration = hyperparams.max_duration_
         self.frames_to_skip = hyperparams.frames_to_skip_
         self.roi_detection_threshold = hyperparams.roi_detection_threshold_
