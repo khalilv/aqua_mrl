@@ -45,7 +45,7 @@ class dqn_controller_adv(Node):
         self.adv_madnitude_x = hyperparams.adv_magnitude_x_
         self.adv_madnitude_y = hyperparams.adv_magnitude_y_
         self.adv_madnitude_z = hyperparams.adv_magnitude_z_
-        self.switch_every = hyperparams.switch_every_
+        self.switch_every = hyperparams.switch_every_adv_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)

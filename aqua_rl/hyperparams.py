@@ -45,4 +45,5 @@ adv_magnitude_y_ = 0.05
 adv_magnitude_z_ = 0.25
 
 #switch between adv and pro
-switch_every_ = 10
+switch_every_ = 50
+switch_every_adv_ = 20
