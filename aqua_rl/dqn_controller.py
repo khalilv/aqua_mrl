@@ -45,6 +45,7 @@ class dqn_controller(Node):
         self.adv_madnitude_x = hyperparams.adv_magnitude_x_
         self.adv_madnitude_y = hyperparams.adv_magnitude_y_
         self.adv_madnitude_z = hyperparams.adv_magnitude_z_
+        self.switch_every = hyperparams.switch_every_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -412,7 +413,11 @@ class dqn_controller(Node):
         if self.episode < self.stop_episode:
             self.reset()
         else:
-            subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py', shell=True)
+            if self.episode % self.switch_every == 0:
+                print('-------------- Switching to adversary --------------')
+                subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter_adv.py', shell=True)
+            else:
+                subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py', shell=True)
             self.popen_called = True
         return
 

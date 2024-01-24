@@ -30,8 +30,8 @@ mean_importance_ = 0.25 #[0,1]
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 29
-train_for_ = 10
+experiment_number_ = 30
+train_for_ = 5
 frames_to_skip_ = 5
 
 #eval hyperparams
@@ -40,6 +40,9 @@ eval_for_ = 3
 
 #adversary hyperparams
 adv_action_space_ = 11
-adv_magnitude_x_ = 0.35
-adv_magnitude_y_ = 0.075
-adv_magnitude_z_ = 0.35
+adv_magnitude_x_ = 0.25
+adv_magnitude_y_ = 0.05
+adv_magnitude_z_ = 0.25
+
+#switch between adv and pro
+switch_every_ = 10
