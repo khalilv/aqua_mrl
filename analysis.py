@@ -12,14 +12,15 @@ def episodic_returns(exp):
     for i, file_path in enumerate(sorted(os.listdir(t_dir))):
         # check if current file_path is a file
         file = os.path.join(t_dir, file_path)
-        with open(file, 'rb') as f:
-            r = np.load(f)
-            if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
-                eval_returns.append(np.sum(r))
-                eval_x.append(i)
-            else:
-                train_returns.append(np.sum(r))
-                train_x.append(i)
+        if os.path.isfile(file):
+            with open(file, 'rb') as f:
+                r = np.load(f)
+                if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
+                    eval_returns.append(np.sum(r))
+                    eval_x.append(i)
+                else:
+                    train_returns.append(np.sum(r))
+                    train_x.append(i)
 
     plt.plot(train_x, train_returns, color='blue', label='Train')
     plt.plot(eval_x, eval_returns, color='yellow', label='Eval')
@@ -41,18 +42,19 @@ def depth_distribution(exp):
     for i, file_path in enumerate(sorted(os.listdir(t_dir))):
         # check if current file_path is a file
         file = os.path.join(t_dir, file_path)
-        with open(file, 'rb') as f:
-            _ = np.load(f)
-            trajectory = np.load(f)
-            depths = np.array(trajectory[:,1])
-            if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
-                eval_depth_mean.append(np.mean(depths))
-                eval_depth_std.append(np.std(depths))
-                eval_x.append(i)
-            else:
-                train_depth_mean.append(np.mean(depths))
-                train_depth_std.append(np.std(depths))
-                train_x.append(i)
+        if os.path.isfile(file):
+            with open(file, 'rb') as f:
+                _ = np.load(f)
+                trajectory = np.load(f)
+                depths = np.array(trajectory[:,1])
+                if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
+                    eval_depth_mean.append(np.mean(depths))
+                    eval_depth_std.append(np.std(depths))
+                    eval_x.append(i)
+                else:
+                    train_depth_mean.append(np.mean(depths))
+                    train_depth_std.append(np.std(depths))
+                    train_x.append(i)
                         
     plt.errorbar(x=train_x, y=train_depth_mean, yerr=train_depth_std, ecolor='red', fmt='.')
     plt.errorbar(x=eval_x, y=eval_depth_mean, yerr=eval_depth_std, ecolor='yellow', fmt='o')
@@ -68,16 +70,17 @@ def duration_distribution(exp):
     for i, file_path in enumerate(sorted(os.listdir(t_dir))):
         # check if current file_path is a file
         file = os.path.join(t_dir, file_path)
-        with open(file, 'rb') as f:
-            _ = np.load(f)
-            trajectory = np.load(f)
-            duration = trajectory.shape[0]
-            if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
-                eval_duration.append(duration)
-                eval_x.append(i)
-            else:
-                train_duration.append(duration)
-                train_x.append(i)
+        if os.path.isfile(file):
+            with open(file, 'rb') as f:
+                _ = np.load(f)
+                trajectory = np.load(f)
+                duration = trajectory.shape[0]
+                if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
+                    eval_duration.append(duration)
+                    eval_x.append(i)
+                else:
+                    train_duration.append(duration)
+                    train_x.append(i)
                         
     plt.plot(train_x, train_duration, color='blue', label='Train')
     plt.plot(eval_x, eval_duration, color='yellow', label='Eval')
@@ -109,11 +112,12 @@ def plot_trajectory(file, target):
 
 def analyze_erm(erm_path):
     import torch
+    from aqua_rl import hyperparams
     from aqua_rl.control.DQN import ReplayMemory, Transition
     from matplotlib import pyplot as plt
     pitch_actions = yaw_actions = [-1,0,1]
-    history_size = 10
-    target_depth = -10
+    history_size = hyperparams.history_size_
+    target_depth = hyperparams.target_depth_
     erm = ReplayMemory(10000)
     memory = torch.load(erm_path, map_location= torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     erm = memory['memory']
@@ -157,9 +161,45 @@ def analyze_erm(erm_path):
         fig.suptitle(title, fontsize=30)
         plt.show()
 
+def analyze_adv_erm(erm_path):
+    import torch
+    from aqua_rl import hyperparams
+    from aqua_rl.helpers import adv_mapping
+    from aqua_rl.control.DQN import ReplayMemory, Transition
+    from matplotlib import pyplot as plt
+    history_size = hyperparams.history_size_
+    target_depth = hyperparams.target_depth_
+    erm = ReplayMemory(10000)
+    memory = torch.load(erm_path, map_location= torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    erm = memory['memory']
+    while True:
+        transition = erm.sample(1)
+        transition = Transition(*zip(*transition))
+        state = torch.cat(transition.state).detach().cpu().numpy()
+        state_depths = torch.cat(transition.state_depths).detach().cpu().numpy()
+        state_actions = torch.cat(transition.state_actions).detach().cpu().numpy()
+        next_state = torch.cat(transition.next_state).detach().cpu().numpy()
+        next_state_depths = torch.cat(transition.next_state_depths).detach().cpu().numpy()
+        next_state_actions = torch.cat(transition.next_state_actions).detach().cpu().numpy()
+        action = torch.cat(transition.action).detach().cpu().numpy()
+        reward = torch.cat(transition.reward).detach().cpu().numpy()
+        fig, axs = plt.subplots(2, history_size, figsize=(30,30))
+        for i in range(state.shape[1]):
+            axs[0,i].imshow(state[0,i,:,:])
+            axs[0,i].set_title("{}, {}".format(np.round(state_depths[0,i] - target_depth, decimals=3), state_actions[0,i]))
+        for i in range(next_state.shape[1]):
+            axs[1,i].imshow(next_state[0,i,:,:])
+            axs[1,i].set_title("{}, {}".format(np.round(next_state_depths[0,i] - target_depth, decimals=3), next_state_actions[0,i]))
+        action_idx = action[0][0]
+        x, y, z = adv_mapping(action_idx)
+        title = "Action (x: {}, y: {}, z: {})".format(x,y,z)
+        title += 'Reward: {}'.format(reward)
+        fig.suptitle(title, fontsize=30)
+        plt.show()
 
-experiment = 26
-episode = 340
+
+experiment = 30
+episode = 10
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
