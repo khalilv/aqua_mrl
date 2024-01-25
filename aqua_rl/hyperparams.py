@@ -40,9 +40,9 @@ eval_for_ = 3
 
 #adversary hyperparams
 adv_action_space_ = 11
-adv_magnitude_x_ = 0.25
+adv_magnitude_x_ = 0.2
 adv_magnitude_y_ = 0.05
-adv_magnitude_z_ = 0.25
+adv_magnitude_z_ = 0.2
 
 #switch between adv and pro
 switch_every_ = 50
