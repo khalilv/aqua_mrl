@@ -53,5 +53,21 @@ def adv_mapping(action):
             return (-1,0,1)
         case 10:
             return (-1,0,-1)
+        case 11:
+            return (0,1,1)
+        case 12:
+            return (0,1,-1)
+        case 13:
+            return (0,-1,1)
+        case 14:
+            return (0,-1,-1)
+        case 15:
+            return (1,0,1)
+        case 16:
+            return (-1,0,1)
+        case 17:
+            return (1,0,-1)
+        case 18:
+            return (-1,0,-1)
         case _:
             raise IndexError

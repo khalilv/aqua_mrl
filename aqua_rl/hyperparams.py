@@ -18,7 +18,7 @@ empty_state_max_ = 30
 depth_range_ = [-6, -14.5]
 starting_line_ = -72
 finish_line_ = 70
-max_duration_ = 5000
+max_duration_ = 3000
 
 #reward hyperparams
 target_depth_ = -10.0
@@ -30,7 +30,7 @@ mean_importance_ = 0.25 #[0,1]
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 30
+experiment_number_ = 31
 train_for_ = 5
 frames_to_skip_ = 5
 
@@ -39,7 +39,7 @@ eval_episode_ = 356
 eval_for_ = 3
 
 #adversary hyperparams
-adv_action_space_ = 11
+adv_action_space_ = 19
 adv_magnitude_x_ = 0.2
 adv_magnitude_y_ = 0.05
 adv_magnitude_z_ = 0.2
