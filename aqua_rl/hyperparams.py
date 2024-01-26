@@ -6,10 +6,11 @@ img_size_ = (32,32)
 
 #control hyperparams
 roll_gains_ = [0.25, 0.0, 0.75]
-history_size_ = 10
+pitch_gains_ = [0.005, 0.0, 0.175]
 speed_ = 0.25
 pitch_limit_ = 0.005
 yaw_limit_ = 0.25
+history_size_ = 10
 yaw_action_space_ = 3
 pitch_action_space_ = 3
 
@@ -47,3 +48,19 @@ adv_magnitude_z_ = 0.2
 #switch between adv and pro
 switch_every_ = 50
 switch_every_adv_ = 20
+
+using_hardware_topics_ = True
+
+if using_hardware_topics_:
+    command_topic_name_ = '/ramius/command'
+    imu_topic_name_ = '/ramius/imu/filtered_data'
+    depth_topic_name_ = '/ramius/depth'
+    camera_topic_name_ = '/ramius/camera/back/image_raw/compressed'
+else:
+    command_topic_name_ = '/a13/command'
+    imu_topic_name_ = '/aqua/pose'
+    depth_topic_name_ = '/aqua/depth'
+    camera_topic_name_ = '/camera/back/image_raw/compressed'9
+adv_magnitude_x_ = 0.2
+adv_magnitude_y_ = 0.05
+adv_magnitude_z_ = 0.2

@@ -20,7 +20,7 @@ class segmentation(Node):
         self.img_size = hyperparams.img_size_
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
-            '/camera/back/image_raw/compressed',
+            hyperparams.camera_topic_name_,
             self.camera_callback,
             self.queue_size)
         self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/segmentation', self.queue_size)
