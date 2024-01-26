@@ -60,7 +60,7 @@ else:
     command_topic_name_ = '/a13/command'
     imu_topic_name_ = '/aqua/pose'
     depth_topic_name_ = '/aqua/depth'
-    camera_topic_name_ = '/camera/back/image_raw/compressed'9
+    camera_topic_name_ = '/camera/back/image_raw/compressed'
 adv_magnitude_x_ = 0.2
 adv_magnitude_y_ = 0.05
 adv_magnitude_z_ = 0.2
