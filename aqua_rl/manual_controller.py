@@ -43,11 +43,12 @@ class manual_controller(Node):
         if self.using_hardware_topics:
             self.depth_subscriber = self.create_subscription(Odometry, hyperparams.depth_topic_name_, self.depth_callback, self.queue_size)
             self.imu_subscriber = self.create_subscription(Imu, hyperparams.imu_topic_name_, self.imu_callback, self.queue_size)
+            self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains)
         else:
             self.depth_subscriber = self.create_subscription(Float32, hyperparams.depth_topic_name_, self.depth_callback, self.queue_size)
             self.imu_subscriber = self.create_subscription(AquaPose, hyperparams.imu_topic_name_, self.imu_callback, self.queue_size)
-
-        self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
+            self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
+            
         self.pitch_pid = PID(target = 0.0, gains = self.pitch_gains)
 
         self.measured_roll_angle = 0.0
@@ -120,7 +121,7 @@ class manual_controller(Node):
     
     def depth_callback(self, depth):
         if self.using_hardware_topics:
-            self.relative_depth = self.target_depth - depth.pose.pose.position.z
+            self.relative_depth = self.target_depth + depth.pose.pose.position.z
         else:
             self.relative_depth = self.target_depth + depth.data
         return

@@ -3,6 +3,7 @@ queue_size_ = 5
 
 #img size
 img_size_ = (32,32)
+display_original_ = False
 
 #control hyperparams
 roll_gains_ = [0.25, 0.0, 0.75] #P,I,D
