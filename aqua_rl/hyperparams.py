@@ -5,11 +5,13 @@ queue_size_ = 5
 img_size_ = (32,32)
 
 #control hyperparams
-roll_gains_ = [0.25, 0.0, 0.75]
-pitch_gains_ = [0.005, 0.0, 0.175]
+roll_gains_ = [0.25, 0.0, 0.75] #P,I,D
+pitch_gains_ = [0.005, 0.0, 0.175] #P,I,D
 speed_ = 0.25
 pitch_limit_ = 0.005
 yaw_limit_ = 0.25
+
+#dqn hyperparams
 history_size_ = 10
 yaw_action_space_ = 3
 pitch_action_space_ = 3
