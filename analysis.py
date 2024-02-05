@@ -197,9 +197,22 @@ def analyze_adv_erm(erm_path):
         fig.suptitle(title, fontsize=30)
         plt.show()
 
+def eval(exp):
+    dir = './evaluations/{}_episode_best/'.format(exp)
+    rewards = []
+    for i, file_path in enumerate(sorted(os.listdir(dir))):
+        # check if current file_path is a file
+        file = os.path.join(dir, file_path)
+        if os.path.isfile(file):
+            with open(file, 'rb') as f:
+                r = np.load(f)
+                rewards.append(np.sum(r))
+    rewards = np.array(rewards)
+    print('Mean: {}, std: {}'.format(np.mean(rewards), np.std(rewards)))
 
-experiment = 30
-episode = 10
+
+experiment = 0
+episode = 296
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
@@ -207,6 +220,5 @@ episodic_returns(experiment)
 depth_distribution(experiment)
 duration_distribution(experiment)
 plot_trajectory(file, target)
-
-
+eval(experiment)
 
