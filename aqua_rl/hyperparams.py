@@ -40,7 +40,7 @@ frames_to_skip_ = 5
 
 #eval hyperparams
 eval_episode_ = -1
-eval_for_ = 2
+eval_for_ = 5
 eval_duration_ = 3000
 
 #adversary hyperparams

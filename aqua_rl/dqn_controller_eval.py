@@ -270,7 +270,7 @@ class dqn_controller_eval(Node):
             np.save(f, self.episode_rewards)
             np.save(f, np.array(self.trajectory))
         
-        if self.episode < self.eval_for:
+        if self.episode < self.eval_for - 1:
             self.reset()
         else:
             rclpy.shutdown()
