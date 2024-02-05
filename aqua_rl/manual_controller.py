@@ -7,9 +7,10 @@ from aqua2_interfaces.msg import Command, AquaPose
 from std_msgs.msg import UInt8MultiArray, Float32
 from aqua_rl.control.PID import AnglePID, PID
 from aqua_rl.control.DQN import ReplayMemory
-from aqua_rl.helpers import reward_calculation
+from aqua_rl.helpers import reward_calculation, euler_from_quaternion
 from aqua_rl import hyperparams
-
+from sensor_msgs.msg import Imu
+from nav_msgs.msg import Odometry
 
 class manual_controller(Node):
     def __init__(self):
@@ -17,6 +18,7 @@ class manual_controller(Node):
         #hyperparams
         self.queue_size = hyperparams.queue_size_
         self.roll_gains = hyperparams.roll_gains_
+        self.pitch_gains = hyperparams.pitch_gains_
         self.history_size = hyperparams.history_size_
         self.pitch_limit = hyperparams.pitch_limit_
         self.yaw_limit = hyperparams.yaw_limit_
@@ -29,19 +31,25 @@ class manual_controller(Node):
         self.roi_detection_threshold = hyperparams.roi_detection_threshold_
         self.mean_importance = hyperparams.mean_importance_
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.using_hardware_topics = hyperparams.using_hardware_topics_
 
         #subscribers and publishers
-        self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
-        self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
+        self.command_publisher = self.create_publisher(Command, hyperparams.command_topic_name_, self.queue_size)
         self.segmentation_subscriber = self.create_subscription(
             UInt8MultiArray, 
             '/segmentation', 
             self.segmentation_callback, 
             self.queue_size)
-        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
-
-        self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
-        self.pitch_pid = PID(target = 0.0, gains = [0.005, 0.0, 0.175])
+        if self.using_hardware_topics:
+            self.depth_subscriber = self.create_subscription(Odometry, hyperparams.depth_topic_name_, self.depth_callback, self.queue_size)
+            self.imu_subscriber = self.create_subscription(Imu, hyperparams.imu_topic_name_, self.imu_callback, self.queue_size)
+            self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains)
+        else:
+            self.depth_subscriber = self.create_subscription(Float32, hyperparams.depth_topic_name_, self.depth_callback, self.queue_size)
+            self.imu_subscriber = self.create_subscription(AquaPose, hyperparams.imu_topic_name_, self.imu_callback, self.queue_size)
+            self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
+            
+        self.pitch_pid = PID(target = 0.0, gains = self.pitch_gains)
 
         self.measured_roll_angle = 0.0
         self.relative_depth = None
@@ -77,6 +85,10 @@ class manual_controller(Node):
         self.listener = keyboard.Listener(on_press=self.get_command)
         self.listener.start()
         self.recieved_command = False
+
+        self.file_name = 'expert_erm.pt'
+        self.samples_collected = 0
+        self.finished = False
         print('Initialized: manual controller ')
   
     def get_command(self, key):
@@ -91,10 +103,9 @@ class manual_controller(Node):
             if key == keyboard.Key.space: # save erm
                 torch.save({
                     'memory': self.erm
-                }, './src/aqua_rl/expert_erm.pt')
-                print('Saved ERM. Please kill node now')
-                input()
-                return
+                }, './src/aqua_rl/' + self.file_name)
+                print('Saved ERM. Please kill node')
+                self.finished = True
         return 
 
     def imu_callback(self, imu):
@@ -102,14 +113,30 @@ class manual_controller(Node):
         return
 
     def calculate_roll(self, imu):
-        return imu.roll
+        if self.using_hardware_topics:
+            roll, _, _ = euler_from_quaternion(imu.orientation)
+            return roll * 180/np.pi
+        else:
+            return imu.roll
     
     def depth_callback(self, depth):
-        self.relative_depth = self.target_depth + depth.data
+        if self.using_hardware_topics:
+            self.relative_depth = self.target_depth + depth.pose.pose.position.z
+        else:
+            self.relative_depth = self.target_depth + depth.data
         return
 
     def segmentation_callback(self, seg_map):
 
+        if self.finished:
+            self.command.speed = 0.0 
+            self.command.roll = 0.0
+            self.command.pitch = 0.0
+            self.command.yaw = 0.0
+            self.command.heave = 0.0
+            self.command_publisher.publish(self.command)
+            return
+        
         #exit if depth has not been measured
         if self.relative_depth is None:
             return 
@@ -134,7 +161,9 @@ class manual_controller(Node):
 
             if self.state is not None and self.state_depths is not None and self.state_actions is not None:
                 self.erm.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
-            
+                self.samples_collected += 1
+                print('Expert samples collected: ', self.samples_collected)
+
             self.pitch_action_idx = self.discretize(self.pitch_pid.control(self.relative_depth), self.pitch_actions)
             a = int(self.pitch_action_idx*self.yaw_action_space) + self.yaw_action_idx
             a = torch.tensor([[a]], device=self.device, dtype=torch.long)

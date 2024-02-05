@@ -18,9 +18,11 @@ class segmentation(Node):
         super().__init__('segmentation')
         self.queue_size = hyperparams.queue_size_
         self.img_size = hyperparams.img_size_
+        self.display_original = hyperparams.display_original_
+
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
-            '/camera/back/image_raw/compressed',
+            hyperparams.camera_topic_name_,
             self.camera_callback,
             self.queue_size)
         self.segmentation_publisher = self.create_publisher(UInt8MultiArray, '/segmentation', self.queue_size)
@@ -41,6 +43,10 @@ class segmentation(Node):
 
 
         cv2.namedWindow("Segmentation Mask", cv2.WINDOW_AUTOSIZE)
+        
+        if self.display_original:
+            cv2.namedWindow("Original", cv2.WINDOW_AUTOSIZE)
+
         print('Initialized: segmentation module')
 
     def camera_callback(self, msg):
@@ -67,7 +73,11 @@ class segmentation(Node):
 
         cv2.imshow('Segmentation Mask', pred * 255)
         cv2.waitKey(1)
-        
+
+        if self.display_original:
+            cv2.imshow('Original', img)
+            cv2.waitKey(1)
+            
         t1 = time.time()
         print('Publishing Frequency: ', (t1 - self.t0))
         self.t0 = t1

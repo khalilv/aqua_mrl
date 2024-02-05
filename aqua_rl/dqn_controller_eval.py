@@ -38,6 +38,7 @@ class dqn_controller_eval(Node):
         self.frames_to_skip = hyperparams.frames_to_skip_
         self.roi_detection_threshold = hyperparams.roi_detection_threshold_
         self.mean_importance = hyperparams.mean_importance_
+        self.eval_duration = hyperparams.eval_duration_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -78,18 +79,29 @@ class dqn_controller_eval(Node):
 
         #stopping condition for empty vision input
         self.empty_state_counter = 0
+        self.duration = 0
 
-        self.checkpoint_path = 'src/aqua_rl/experiments/{}/weights/episode_{}.pt'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
-        self.save_path = 'src/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
+        if self.eval_episode == -1:
+            self.checkpoint_path = 'src/aqua_rl/experiments/{}/best.pt'.format(str(self.experiment_number))
+            self.save_path = 'src/aqua_rl/evaluations/{}_episode_best/'.format(str(self.experiment_number))
+        else:
+            self.checkpoint_path = 'src/aqua_rl/experiments/{}/weights/episode_{}.pt'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
+            self.save_path = 'src/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
+        
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
         checkpoint = torch.load(self.checkpoint_path, map_location=self.dqn.device)
+        print(checkpoint)
         self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
         self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
         self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.dqn.steps_done = checkpoint['training_steps']
         self.episode = 0
-        print('Weights loaded from episode: ', self.eval_episode, ', training steps completed: ', self.dqn.steps_done)
+        
+        if self.eval_episode == -1:
+            print('Weights loaded from best episode, training steps completed: ', self.dqn.steps_done)
+        else:
+            print('Weights loaded from episode: ', self.eval_episode, ', training steps completed: ', self.dqn.steps_done)
 
         #initialize command
         self.command = Command()
@@ -206,6 +218,14 @@ class dqn_controller_eval(Node):
             self.complete = False
             return
         
+        if self.duration > self.eval_duration:
+            print("Duration Reached")
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = True
+            return
+        self.duration += 1
+        
         self.depth_history.append(self.relative_depth)
         self.image_history.append(seg_map)
         if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
@@ -250,7 +270,7 @@ class dqn_controller_eval(Node):
             np.save(f, self.episode_rewards)
             np.save(f, np.array(self.trajectory))
         
-        if self.episode < self.eval_for:
+        if self.episode < self.eval_for - 1:
             self.reset()
         else:
             rclpy.shutdown()
@@ -302,6 +322,7 @@ class dqn_controller_eval(Node):
 
         #reset counters
         self.empty_state_counter = 0
+        self.duration = 0
 
         #reset end conditions 
         self.finished = False
