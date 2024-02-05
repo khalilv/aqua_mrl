@@ -34,25 +34,25 @@ mean_importance_ = 0.25 #[0,1]
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 31
+experiment_number_ = 0
 train_for_ = 5
 frames_to_skip_ = 5
 
 #eval hyperparams
-eval_episode_ = 356
+eval_episode_ = -1
 eval_for_ = 3
 
 #adversary hyperparams
 adv_action_space_ = 19
 adv_magnitude_x_ = 0.2
-adv_magnitude_y_ = 0.05
+adv_magnitude_y_ = 0.005
 adv_magnitude_z_ = 0.2
 
 #switch between adv and pro
-switch_every_ = 50
-switch_every_adv_ = 20
+switch_every_ = 600
+switch_every_adv_ = 5
 
-using_hardware_topics_ = True
+using_hardware_topics_ = False
 
 if using_hardware_topics_:
     command_topic_name_ = '/ramius/command'
@@ -64,6 +64,3 @@ else:
     imu_topic_name_ = '/aqua/pose'
     depth_topic_name_ = '/aqua/depth'
     camera_topic_name_ = '/camera/back/image_raw/compressed'
-adv_magnitude_x_ = 0.2
-adv_magnitude_y_ = 0.05
-adv_magnitude_z_ = 0.2

@@ -79,17 +79,27 @@ class dqn_controller_eval(Node):
         #stopping condition for empty vision input
         self.empty_state_counter = 0
 
-        self.checkpoint_path = 'src/aqua_rl/experiments/{}/weights/episode_{}.pt'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
-        self.save_path = 'src/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
+        if self.eval_episode == -1:
+            self.checkpoint_path = 'src/aqua_rl/experiments/{}/best.pt'.format(str(self.experiment_number))
+            self.save_path = 'src/aqua_rl/evaluations/{}_episode_best/'.format(str(self.experiment_number))
+        else:
+            self.checkpoint_path = 'src/aqua_rl/experiments/{}/weights/episode_{}.pt'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
+            self.save_path = 'src/aqua_rl/evaluations/{}_episode_{}/'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
+        
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
         checkpoint = torch.load(self.checkpoint_path, map_location=self.dqn.device)
+        print(checkpoint)
         self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
         self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
         self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.dqn.steps_done = checkpoint['training_steps']
         self.episode = 0
-        print('Weights loaded from episode: ', self.eval_episode, ', training steps completed: ', self.dqn.steps_done)
+        
+        if self.eval_episode == -1:
+            print('Weights loaded from best episode, training steps completed: ', self.dqn.steps_done)
+        else:
+            print('Weights loaded from episode: ', self.eval_episode, ', training steps completed: ', self.dqn.steps_done)
 
         #initialize command
         self.command = Command()
