@@ -38,6 +38,7 @@ class dqn_controller_eval(Node):
         self.frames_to_skip = hyperparams.frames_to_skip_
         self.roi_detection_threshold = hyperparams.roi_detection_threshold_
         self.mean_importance = hyperparams.mean_importance_
+        self.eval_duration = hyperparams.eval_duration_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -78,6 +79,7 @@ class dqn_controller_eval(Node):
 
         #stopping condition for empty vision input
         self.empty_state_counter = 0
+        self.duration = 0
 
         if self.eval_episode == -1:
             self.checkpoint_path = 'src/aqua_rl/experiments/{}/best.pt'.format(str(self.experiment_number))
@@ -216,6 +218,14 @@ class dqn_controller_eval(Node):
             self.complete = False
             return
         
+        if self.duration > self.eval_duration:
+            print("Duration Reached")
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = True
+            return
+        self.duration += 1
+        
         self.depth_history.append(self.relative_depth)
         self.image_history.append(seg_map)
         if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
@@ -312,6 +322,7 @@ class dqn_controller_eval(Node):
 
         #reset counters
         self.empty_state_counter = 0
+        self.duration = 0
 
         #reset end conditions 
         self.finished = False
