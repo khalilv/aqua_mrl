@@ -33,6 +33,8 @@ setup(
             'dqn_controller = aqua_rl.dqn_controller:main',
             'dqn_controller_eval = aqua_rl.dqn_controller_eval:main',
             'dqn_controller_adv = aqua_rl.dqn_controller_adv:main',
+            'dqn_barbados = aqua_rl.dqn_barbados:main',
+
         ],
     },
 )

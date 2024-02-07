@@ -6,9 +6,6 @@ img_size_ = (32,32)
 display_original_ = False
 
 #control hyperparams
-roll_gains_ = [0.25, 0.0, 0.75] #P,I,D
-pitch_gains_ = [0.005, 0.0, 0.175] #P,I,D
-speed_ = 0.25
 pitch_limit_ = 0.005
 yaw_limit_ = 0.25
 
@@ -60,8 +57,16 @@ if using_hardware_topics_:
     imu_topic_name_ = '/ramius/imu/filtered_data'
     depth_topic_name_ = '/ramius/depth'
     camera_topic_name_ = '/ramius/camera/back/image_raw/compressed'
+    target_depth_ = -1.0
+    roll_gains_ = [0.6, 0.0, 0.0] #P,I,D
+    pitch_gains_ = [5.0, 0.0, 0.0] #P,I,D
+    speed_ = 0.4
 else:
     command_topic_name_ = '/a13/command'
     imu_topic_name_ = '/aqua/pose'
     depth_topic_name_ = '/aqua/depth'
     camera_topic_name_ = '/camera/back/image_raw/compressed'
+    target_depth_ = -10.0
+    roll_gains_ = [0.25, 0.0, 0.75] #P,I,D
+    pitch_gains_ = [0.005, 0.0, 0.175] #P,I,D
+    speed_ = 0.25

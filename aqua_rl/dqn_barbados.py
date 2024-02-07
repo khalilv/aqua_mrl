@@ -4,6 +4,7 @@ import numpy as np
 import os
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command
+from aqua2_interfaces.srv import RecordTopics
 from std_srvs.srv import Empty
 from std_msgs.msg import UInt8MultiArray 
 from aqua_rl.control.PID import AnglePID
@@ -12,6 +13,7 @@ from aqua_rl.helpers import reward_calculation, euler_from_quaternion
 from aqua_rl import hyperparams
 from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
+from time import sleep
 
 class dqn_barbados(Node):
     def __init__(self):
@@ -34,8 +36,9 @@ class dqn_barbados(Node):
         self.roi_detection_threshold = hyperparams.roi_detection_threshold_
         self.mean_importance = hyperparams.mean_importance_
         self.eval_duration = hyperparams.eval_duration_
-        self.checkpoint_path = 'src/aqua_rl/experiments/'
+        self.checkpoint_path = 'src/aqua_rl/experiments/0/best.pt'
         self.save_path = 'src/aqua_rl/evaluations/test/'
+        self.bagfile_prefix = 'test'
         
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, hyperparams.command_topic_name_, self.queue_size)
@@ -49,7 +52,6 @@ class dqn_barbados(Node):
 
         #finished is episode has ended. complete is if aqua has reached the goal 
         self.finished = False
-        self.complete = False
 
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains)
         self.measured_roll_angle = None
@@ -79,13 +81,15 @@ class dqn_barbados(Node):
 
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
-        self.episode = len(os.listdir(self.save_path))
+        self.episode = int(len(os.listdir(self.save_path))/2)
         checkpoint = torch.load(self.checkpoint_path, map_location=self.dqn.device)
         self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
         self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
         self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.dqn.steps_done = checkpoint['training_steps']
-        print('Weights loaded from {}, training steps completed: {}'.format(self.checkpoint_path, self.dqn.steps_done ))
+        self.get_logger().info(f'Weights loaded successfully')
+
+        # print('Weights loaded from {}, training steps completed: {}'.format(self.checkpoint_path, self.dqn.steps_done ))
 
         #initialize command
         self.command = Command()
@@ -95,21 +99,38 @@ class dqn_barbados(Node):
         self.command.yaw = 0.0
         self.command.heave = 0.0
 
-        self.srv = self.create_service(Empty, '/mrl/controller', self.tag_callback)
+        self.srv_start = self.create_service(Empty, '/mrl/controller/start', self.tag_start_callback)
+        self.srv_stop = self.create_service(Empty, '/mrl/controller/stop', self.tag_stop_callback)
         self.start_flag = False
 
-        print('Initialized: dqn barbados')
+        self.record_bags_from_node = False
+        self.srv_record_start = self.create_client(RecordTopics, '/ramius/recorder/start_recording')
+        self.srv_record_stop = self.create_client(Empty, '/ramius/recorder/stop_recording')
+        self.req_record_start = RecordTopics.Request()
+        self.req_record_stop = Empty.Request()
+        self.get_logger().info(f'Initialized: dqn barbados')
   
 
-    def tag_callback(self, request, response):
-        if self.start_flag:
-            print('Recieved hard stop from tag')
-            self.finished = True
-        else:
+    def tag_start_callback(self, request, response):
+        if not self.start_flag:
+            self.get_logger().info(f'Recieved start tag')
             self.start_flag = True
+            
+            if self.record_bags_from_node:
+                self.req_record_start.bag_name = self.bagfile_prefix + '_episode_{}_'.format(str(self.episode))
+                self.req_record_start.bag_type = 'mcap'
+                self.req_record_start.topic_names = ["camera/back/image_raw/compressed", "imu/filtered_data", "depth"]
+                self.srv_record_start.call_async(self.req_record_start)
+                sleep(2)
+                self.get_logger().info(f'Starting ros bag record')
         return response
 
-
+    def tag_stop_callback(self, request, response):
+        if self.start_flag:
+            self.get_logger().info(f'Recieved stop tag')
+            self.finished = True
+            return response
+    
     def imu_callback(self, imu):
         if self.start_flag and not self.finished:
             self.measured_roll_angle = self.calculate_roll(imu)
@@ -123,12 +144,11 @@ class dqn_barbados(Node):
         if self.start_flag and not self.finished:
             self.relative_depth = self.target_depth + depth.pose.pose.position.z
             if np.abs(self.relative_depth) > 2: 
-                print('Drifted outside depth range')
+                self.get_logger().info(f'Drifted outside depth range')
                 self.finished = True
         return
       
     def segmentation_callback(self, seg_map):
-        
         if self.start_flag:
 
             #if episode is not finished
@@ -147,15 +167,16 @@ class dqn_barbados(Node):
             
                 #if nothing has been detected in empty_state_max frames then reset
                 if self.empty_state_counter >= self.empty_state_max:
-                    print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
+                    self.get_logger().info(f'Nothing detected in state space for x states')
+                    self.finished = True
                     return
             
                 if self.duration > self.eval_duration:
-                    print("Duration Reached")
+                    self.get_logger().info(f'Duration Reached')
                     self.finished = True
                     return
                 self.duration += 1
-            
+
                 self.depth_history.append(self.relative_depth)
                 self.image_history.append(seg_map)
                 if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
@@ -169,7 +190,7 @@ class dqn_barbados(Node):
 
                     reward = reward_calculation(seg_map, self.relative_depth, self.roi_detection_threshold, self.mean_importance)
                     self.episode_rewards.append(reward)
-                    self.reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
+                    self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
                     if self.state is not None and self.state_depths is not None and self.state_actions is not None:
                         self.erm.push(self.state, self.state_depths, self.state_actions, self.action, self.next_state, self.next_state_depths, self.next_state_actions, self.reward)
                 
@@ -201,16 +222,20 @@ class dqn_barbados(Node):
             self.command.heave = 0.0
             self.command_publisher.publish(self.command)
 
+        if self.record_bags_from_node:
+            self.srv_record_stop.call_async(self.req_record_stop)
+            self.get_logger().info(f'Stopping ros bag record')
+
         self.episode_rewards = np.array(self.episode_rewards)
-        print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
+        # print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
 
         with open(self.save_path + '/episode_{}.npy'.format(str(self.episode)), 'wb') as f:
             np.save(f, self.episode_rewards)
         torch.save({
                     'memory': self.erm
-                }, self.save_path + '/episode_{}.pt')
+                }, self.save_path + '/episode_{}.pt'.format(str(self.episode)))
         
-        print('Episode ended gracefully and saved data. Resetting.')
+        self.get_logger().info(f'Episode ended gracefully and saved data. Resetting.')
 
         self.measured_roll_angle = None
         self.relative_depth = None
@@ -239,6 +264,7 @@ class dqn_barbados(Node):
         #reset end conditions 
         self.finished = False
         self.start_flag = False
+
         return
 
 
