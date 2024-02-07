@@ -49,8 +49,6 @@ class manual_controller(Node):
             self.imu_subscriber = self.create_subscription(AquaPose, hyperparams.imu_topic_name_, self.imu_callback, self.queue_size)
             self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
             
-        self.pitch_pid = PID(target = 0.0, gains = self.pitch_gains)
-
         self.measured_roll_angle = 0.0
         self.relative_depth = None
         
@@ -93,12 +91,18 @@ class manual_controller(Node):
   
     def get_command(self, key):
         try:
-            if key.char == 'a': # yaw left
-                self.yaw_action_idx = 2
-            elif key.char == 'd': # yaw right
+            if key.char == 'a': # yaw right
                 self.yaw_action_idx = 0
-            else:
-                self.yaw_action_idx = 1 #straight
+            elif key.char == 'd': # yaw left
+                self.yaw_action_idx = 2
+            elif key.char == 's':  #straight
+                self.yaw_action_idx = 1 
+            elif key.char == 'i': #pitch up
+                self.pitch_action_idx = 0
+            elif key.char == 'm': #pitch down
+                self.pitch_action_idx = 2
+            elif key.char == 'k': #no pitch
+                self.pitch_action_idx = 1
         except AttributeError:
             if key == keyboard.Key.space: # save erm
                 torch.save({
@@ -164,7 +168,6 @@ class manual_controller(Node):
                 self.samples_collected += 1
                 print('Expert samples collected: ', self.samples_collected)
 
-            self.pitch_action_idx = self.discretize(self.pitch_pid.control(self.relative_depth), self.pitch_actions)
             a = int(self.pitch_action_idx*self.yaw_action_space) + self.yaw_action_idx
             a = torch.tensor([[a]], device=self.device, dtype=torch.long)
             self.action = a    
