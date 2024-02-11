@@ -16,7 +16,11 @@ import argparse
 
 # data transformations
 data_transforms = {
-    'test': A.Compose([
+    'test': A.Compose([A.Resize(
+                320,
+                416,
+                always_apply=True,
+            ),
         A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ])

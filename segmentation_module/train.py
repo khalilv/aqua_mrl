@@ -14,7 +14,6 @@ from tqdm import tqdm
 import os
 import argparse
 
-import segmentation_models_pytorch as smp
 
 # data transformations
 data_transforms = {
@@ -63,6 +62,7 @@ def load_model(n_classes, encoder_name = None):
        # replace classifier
        model.classifier = DeepLabHead(960, num_classes=n_classes)
     else:
+        import segmentation_models_pytorch as smp
         model = smp.Unet(
             encoder_name = encoder_name,      # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
             encoder_weights = "imagenet",     # use `imagenet` pre-trained weights for encoder initialization
