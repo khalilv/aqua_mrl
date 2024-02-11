@@ -20,7 +20,8 @@ class manual_controller(Node):
         self.roll_gains = hyperparams.roll_gains_
         self.pitch_gains = hyperparams.pitch_gains_
         self.history_size = hyperparams.history_size_
-        self.pitch_limit = hyperparams.pitch_limit_
+        self.pitch_limit_lower = hyperparams.pitch_limit_lower_
+        self.pitch_limit_upper = hyperparams.pitch_limit_upper_
         self.yaw_limit = hyperparams.yaw_limit_
         self.yaw_action_space = hyperparams.yaw_action_space_
         self.pitch_action_space = hyperparams.pitch_action_space_
@@ -54,7 +55,7 @@ class manual_controller(Node):
         
         #dqn controller for yaw and pitch 
         self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
-        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
+        self.pitch_actions = np.linspace(self.pitch_limit_lower, self.pitch_limit_upper, self.pitch_action_space)
         self.state = None
         self.next_state = None
         self.state_depths = None

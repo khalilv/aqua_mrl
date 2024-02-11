@@ -13,6 +13,11 @@ class DeepLabv3:
         self.model = self.load_model(2)
         self.model.to(self.device)
         self.transforms = A.Compose([
+            A.Resize(
+                320,
+                416,
+                always_apply=True,
+            ),
             A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ToTensorV2()
         ])
