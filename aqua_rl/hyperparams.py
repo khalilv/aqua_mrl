@@ -3,10 +3,11 @@ queue_size_ = 5
 
 #img size
 img_size_ = (32,32)
-display_original_ = False
+display_original_ = True
 
 #control hyperparams
-pitch_limit_ = 0.005
+pitch_limit_lower_ = -0.3
+pitch_limit_upper_ = 0.5
 yaw_limit_ = 0.25
 
 #dqn hyperparams
@@ -50,7 +51,7 @@ adv_magnitude_z_ = 0.25
 switch_every_ = 50
 switch_every_adv_ = 50
 
-using_hardware_topics_ = False
+using_hardware_topics_ = True
 
 if using_hardware_topics_:
     command_topic_name_ = '/ramius/command'
@@ -60,7 +61,7 @@ if using_hardware_topics_:
     target_depth_ = -1.0
     roll_gains_ = [0.6, 0.0, 0.0] #P,I,D
     pitch_gains_ = [5.0, 0.0, 0.0] #P,I,D
-    speed_ = 0.4
+    speed_ = 0.6
 else:
     command_topic_name_ = '/a13/command'
     imu_topic_name_ = '/aqua/pose'
