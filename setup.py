@@ -35,6 +35,8 @@ setup(
             'dqn_controller_adv = aqua_rl.dqn_controller_adv:main',
             'dqn_barbados = aqua_rl.dqn_barbados:main',
             'teleop_controller = aqua_rl.teleop_controller:main',
+            'detect = aqua_rl.detect:main',
+            'diver_controller = aqua_rl.diver_controller:main',
 
         ],
     },

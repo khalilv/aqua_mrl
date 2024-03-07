@@ -11,4 +11,5 @@ evaluations/
 trajectories/
 experiments/
 pid_expert/
+diver_dataset/
 
