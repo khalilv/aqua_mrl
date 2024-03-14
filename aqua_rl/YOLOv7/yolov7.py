@@ -82,7 +82,7 @@ class YoloV7:
                         x1, y1,x2, y2 = (torch.FloatTensor(xyxy)).detach().cpu().numpy()
                         label = f'{self.names[int(cls)]} {conf:.2f}'
                         plot_one_box(xyxy, original, label=label, color=self.colors[int(cls)], line_thickness=1)
-                        outputs.append([int(x1),int(y1),int(x2),int(y2)])
+                        outputs.append([int(x1),int(y1),int(x2),int(y2), conf])
             if self.verbose:
                 # Print time (inference + NMS)
                 print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
