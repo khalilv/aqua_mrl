@@ -37,7 +37,7 @@ class dqn_controller(Node):
         self.eval_duration = hyperparams.eval_duration_
         self.depth_range = hyperparams.depth_range_
         self.diver_max_speed = hyperparams.diver_max_speed_
-
+        self.reward_sharpness = hyperparams.sharpness_
         # self.switch_every = hyperparams.switch_every_
         # self.adv_action_space = hyperparams.adv_action_space_
         # self.adv_madnitude_x = hyperparams.adv_magnitude_x_
@@ -316,7 +316,7 @@ class dqn_controller(Node):
   
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
            
-            pitch_reward, yaw_reward = reward_calculation(center, self.img_size, self.img_size, 0.2, 0.2)
+            pitch_reward, yaw_reward = reward_calculation(center, self.img_size, self.img_size, self.reward_sharpness, self.reward_sharpness)
             self.episode_rewards.append([pitch_reward, yaw_reward])
             self.pitch_reward = torch.tensor([pitch_reward], dtype=torch.float32, device=self.dqn.device)
             self.yaw_reward = torch.tensor([yaw_reward], dtype=torch.float32, device=self.dqn.device)

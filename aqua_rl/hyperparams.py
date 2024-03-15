@@ -20,6 +20,7 @@ depth_range_ = [-6, -12]
 train_duration_ = 2000
 
 #reward hyperparams
+sharpness_ = 0.2
 
 #training hyperparams
 load_erm_ = True

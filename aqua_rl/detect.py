@@ -39,7 +39,7 @@ class detect(Node):
         #online dataset collection
         self.dataset_path = 'src/aqua_rl/diver_dataset/'
         self.dataset_size = len(os.listdir(self.dataset_path))
-        self.save_probability = 0.01
+        self.save_probability = 0.0
 
         #measuring publish frequency
         self.t0 = 0
