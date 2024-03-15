@@ -61,12 +61,12 @@ class DQNNetwork(nn.Module):
 class DQN:
 
     def __init__(self, n_pitch_actions, n_yaw_actions, history_size) -> None:
-        self.BATCH_SIZE = 32
+        self.BATCH_SIZE = 64
         self.GAMMA = 0.99
         self.EPS_START = 0.8
         self.EPS_END = 0.1
-        self.EPS_DECAY = 60000
-        self.TAU = 0.002
+        self.EPS_DECAY = 100000
+        self.TAU = 0.005
         LR = 1e-3
         self.MEMORY_SIZE = 50000
         self.n_pitch_actions = n_pitch_actions

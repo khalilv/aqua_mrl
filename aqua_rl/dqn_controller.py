@@ -215,7 +215,7 @@ class dqn_controller(Node):
         if self.diver_pose:
 
             #scale vector to current magnitude
-            self.diver_cmd.vx = hyperparams.speed_
+            self.diver_cmd.vx = 0.35
             self.diver_cmd.vy = np.random.uniform(-1,1)
             self.diver_cmd.vz = np.random.uniform(-1,1)
 
@@ -316,7 +316,7 @@ class dqn_controller(Node):
   
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
            
-            pitch_reward, yaw_reward = reward_calculation(center, self.img_size, self.img_size, 0.1, 0.1)
+            pitch_reward, yaw_reward = reward_calculation(center, self.img_size, self.img_size, 0.2, 0.2)
             self.episode_rewards.append([pitch_reward, yaw_reward])
             self.pitch_reward = torch.tensor([pitch_reward], dtype=torch.float32, device=self.dqn.device)
             self.yaw_reward = torch.tensor([yaw_reward], dtype=torch.float32, device=self.dqn.device)
@@ -334,23 +334,21 @@ class dqn_controller(Node):
                
                 #select adversary action
                 # self.adv_action = self.dqn_adv.select_eval_action(self.next_state, self.next_state_depths, self.next_state_actions)
-                
+                # Perform one step of the optimization (on the policy network)
+                if self.dqn.steps_done % 1 == 0:
+                    loss = self.dqn.optimize()
+                    if loss is not None:        
+                        self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
+                    # Soft update of the target network's weights
+                    # θ′ ← τ θ + (1 −τ )θ′
+                    target_net_state_dict = self.dqn.target_net.state_dict()
+                    policy_net_state_dict = self.dqn.policy_net.state_dict()
+                    for key in policy_net_state_dict:
+                        target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
+                    self.dqn.target_net.load_state_dict(target_net_state_dict)
+            
             self.history.pop(0)
 
-        if not self.evaluate:
-            # Perform one step of the optimization (on the policy network)
-            if self.dqn.steps_done % 1 == 0:
-                loss = self.dqn.optimize()
-                if loss is not None:        
-                    self.writer.add_scalar('Loss', loss, self.dqn.steps_done)
-                # Soft update of the target network's weights
-                # θ′ ← τ θ + (1 −τ )θ′
-                target_net_state_dict = self.dqn.target_net.state_dict()
-                policy_net_state_dict = self.dqn.policy_net.state_dict()
-                for key in policy_net_state_dict:
-                    target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
-                self.dqn.target_net.load_state_dict(target_net_state_dict)
-        
         #adversary action
         # x,y,z = adv_mapping(self.adv_action.detach().cpu().numpy()[0][0])
         # self.adv_command.current_x = self.adv_madnitude_x * x
@@ -367,7 +365,6 @@ class dqn_controller(Node):
         self.command.roll = self.roll_pid.control(self.measured_roll_angle)
         self.command_publisher.publish(self.command)
         return 
-        
     def finish(self):
 
         if self.popen_called:

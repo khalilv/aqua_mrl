@@ -23,8 +23,8 @@ train_duration_ = 2000
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 0
-train_for_ = 5
+experiment_number_ = 1
+train_for_ = 10
 
 #eval hyperparams
 eval_episode_ = -1

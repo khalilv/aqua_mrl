@@ -3,7 +3,7 @@ import numpy as np
 
 def reward_calculation(center, w, h, yaw_scale, pitch_scale):
     if center[0] == -1 and center[1] == -1:
-        return -1, -1
+        return -pitch_scale, -yaw_scale
     else:
         yaw_dist = np.abs(((w/2) - center[0])/(w/2))
         pitch_dist = np.abs(((h/2) - center[1])/(h/2))
