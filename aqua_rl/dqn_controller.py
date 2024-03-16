@@ -11,7 +11,7 @@ from std_msgs.msg import Float32MultiArray
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import reward_calculation
+from aqua_rl.helpers import reward_calculation, action_mapping
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -82,10 +82,8 @@ class dqn_controller(Node):
         self.dqn = DQN(self.pitch_action_space, self.yaw_action_space, self.history_size) 
         self.state = None
         self.next_state = None
-        self.pitch_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)
-        self.yaw_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)
-        self.pitch_reward = None
-        self.yaw_reward = None
+        self.action = torch.tensor([[12]], device=self.dqn.device, dtype=torch.long)
+        self.reward = None
         self.history = []
         self.episode_rewards = []
         self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
@@ -316,20 +314,19 @@ class dqn_controller(Node):
   
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
            
-            pitch_reward, yaw_reward = reward_calculation(center, self.img_size, self.img_size, self.reward_sharpness, self.reward_sharpness)
-            self.episode_rewards.append([pitch_reward, yaw_reward])
-            self.pitch_reward = torch.tensor([pitch_reward], dtype=torch.float32, device=self.dqn.device)
-            self.yaw_reward = torch.tensor([yaw_reward], dtype=torch.float32, device=self.dqn.device)
+            reward = reward_calculation(center, self.img_size, self.img_size, self.reward_sharpness, self.reward_sharpness)
+            self.episode_rewards.append(reward)
+            self.reward = torch.tensor(reward, dtype=torch.float32, device=self.dqn.device)
 
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.pitch_action, self.yaw_action = self.dqn.select_eval_action(self.next_state)
+                self.action = self.dqn.select_eval_action(self.next_state)
             else:
                 if self.state is not None:
-                    self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
-                    self.erm.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
+                    self.dqn.memory.push(self.state, self.action, self.next_state, self.reward)
+                    self.erm.push(self.state, self.action, self.next_state, self.reward)
 
-                self.pitch_action, self.yaw_action = self.dqn.select_action(self.next_state)       
+                self.action = self.dqn.select_action(self.next_state)       
                 self.state = self.next_state
                
                 #select adversary action
@@ -357,21 +354,22 @@ class dqn_controller(Node):
         # self.adv_command_publisher.publish(self.adv_command)
         
         #protagonist action
-        pitch_action_idx = self.pitch_action.detach().cpu().numpy()[0][0]
-        yaw_action_idx = self.yaw_action.detach().cpu().numpy()[0][0]
-        self.command.pitch = self.pitch_actions[pitch_action_idx]
-        self.command.yaw = self.yaw_actions[yaw_action_idx]            
+        action_idx = self.action.detach().cpu().numpy()[0][0]
+        pitch_idx, yaw_idx = action_mapping(action_idx, 5)
+        self.command.pitch = self.pitch_actions[pitch_idx]
+        self.command.yaw = self.yaw_actions[yaw_idx]            
         self.command.speed = hyperparams.speed_ #fixed speed
         self.command.roll = self.roll_pid.control(self.measured_roll_angle)
         self.command_publisher.publish(self.command)
         return 
+    
     def finish(self):
 
         if self.popen_called:
             return 
           
         self.episode_rewards = np.array(self.episode_rewards)
-        print('Episode rewards. Average: ', np.mean(self.episode_rewards, axis=0), ' Sum: ', np.sum(self.episode_rewards, axis=0))
+        print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
         
         if self.evaluate:
             self.writer.add_scalar('Episode Rewards (Eval)', np.sum(self.episode_rewards), self.episode)
@@ -381,8 +379,8 @@ class dqn_controller(Node):
         self.writer.add_scalar('Duration', self.duration, self.episode)
 
         if self.state is not None and not self.evaluate and not self.complete:
-            self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, None, self.pitch_reward, self.yaw_reward)
-            self.erm.push(self.state, self.pitch_action, self.yaw_action, None, self.pitch_reward, self.yaw_reward)
+            self.dqn.memory.push(self.state, self.action, None, self.reward)
+            self.erm.push(self.state, self.action, None, self.reward)
 
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
@@ -458,11 +456,9 @@ class dqn_controller(Node):
         self.state = None
         self.next_state = None
         
-        self.pitch_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)
-        self.yaw_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)
+        self.action = torch.tensor([[12]], device=self.dqn.device, dtype=torch.long)
         # self.adv_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)
-        self.pitch_reward = None
-        self.yaw_reward = None
+        self.reward = None
         self.history = []
 
 

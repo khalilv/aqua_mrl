@@ -12,4 +12,7 @@ trajectories/
 experiments/
 pid_expert/
 diver_dataset/
+pipe_dataset/
+dqn_weights/
+experiments_td3/
 
