@@ -5,6 +5,7 @@ from aqua_rl.YOLOv7.utils.general import check_img_size, non_max_suppression, \
 from aqua_rl.YOLOv7.utils.plots import plot_one_box
 from aqua_rl.YOLOv7.utils.torch_utils import time_synchronized, TracedModel
 from aqua_rl.YOLOv7.models.experimental import attempt_load
+from aqua_rl.YOLOv7.sort import Sort, iou_batch
 
 class YoloV7:
     def __init__(self, cfg):
@@ -34,6 +35,11 @@ class YoloV7:
         self.old_img_w = self.old_img_h = self.image_size
         self.old_img_b = 1
         self.verbose = cfg.verbose
+
+        self.track = cfg.track
+        self.tracker = Sort(max_age=cfg.max_age, min_hits=cfg.min_hits, iou_threshold=self.iou_threshold)
+       
+
         return
 
     def detect(self, img):
@@ -76,6 +82,25 @@ class YoloV7:
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
+                dets_to_sort = np.empty((0,6))
+                for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
+                    dets_to_sort = np.vstack((dets_to_sort, 
+                                np.array([x1, y1, x2, y2, conf, detclass])))
+            else:
+                dets_to_sort = np.empty((0,6))
+
+            if self.track:
+                tracked_dets = self.tracker.update(dets_to_sort)
+                
+                for track in tracked_dets:
+                    x1, y1,x2, y2 = track[0:4]
+                    conf = track[4]
+                    cls = self.names[int(track[5])]
+                    label = f'{cls} {conf:.2f} {track[-1]}'
+                    plot_one_box(track[0:4], original, label=label, color=self.colors[0], line_thickness=1)
+                    outputs.append([int(x1),int(y1),int(x2),int(y2), conf])
+
+            else:
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     if(conf > self.confidence_threshold):

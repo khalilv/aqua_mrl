@@ -1,23 +1,19 @@
 import numpy as np
 
 
-def reward_calculation(center, w, h, yaw_scale, pitch_scale):
-    if center[0] == -1 and center[1] == -1:
-        return -(pitch_scale + yaw_scale)
-    else:
-        yaw_dist = np.abs(((w/2) - center[0])/(w/2))
-        pitch_dist = np.abs(((h/2) - center[1])/(h/2))
-        yaw_reward = yaw_scale/(yaw_dist + yaw_scale)
-        pitch_reward = pitch_scale/(pitch_dist + pitch_scale)
-        return (pitch_reward + yaw_reward)/2
+def reward_calculation(detected, w, h):
+    target = (w/2, h/2)
+    max_dist = np.sqrt(np.square(w)+np.square(h))/2
+    dist = np.sqrt(np.square(detected[0] - target[0]) + np.square(detected[1] - target[1]))/max_dist
+    return 1 - dist
     
 def action_mapping(idx, n):
     pitch = idx // n
     yaw = idx % n
     return pitch, yaw
 
-def inverse_mapping(pitch_idx, yaw_idx):
-    return int(pitch_idx * 5 + yaw_idx)
+def inverse_mapping(pitch_idx, yaw_idx, n):
+    return int(pitch_idx * n + yaw_idx)
     
 def euler_from_quaternion(quaternion):
     """

@@ -11,7 +11,7 @@ from std_msgs.msg import Float32MultiArray
 from time import sleep, time
 from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import reward_calculation, action_mapping
+from aqua_rl.helpers import reward_calculation, action_mapping, inverse_mapping
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -28,7 +28,6 @@ class dqn_controller(Node):
         self.yaw_action_space = hyperparams.yaw_action_space_
         self.pitch_action_space = hyperparams.pitch_action_space_
         self.img_size = hyperparams.img_size_
-        self.empty_state_max = hyperparams.empty_state_max_
         self.depth_range = hyperparams.depth_range_
         self.load_erm = hyperparams.load_erm_ 
         self.experiment_number = hyperparams.experiment_number_
@@ -38,6 +37,7 @@ class dqn_controller(Node):
         self.depth_range = hyperparams.depth_range_
         self.diver_max_speed = hyperparams.diver_max_speed_
         self.reward_sharpness = hyperparams.sharpness_
+        self.frame_skip = hyperparams.frame_skip_
         # self.switch_every = hyperparams.switch_every_
         # self.adv_action_space = hyperparams.adv_action_space_
         # self.adv_madnitude_x = hyperparams.adv_magnitude_x_
@@ -82,7 +82,8 @@ class dqn_controller(Node):
         self.dqn = DQN(self.pitch_action_space, self.yaw_action_space, self.history_size) 
         self.state = None
         self.next_state = None
-        self.action = torch.tensor([[12]], device=self.dqn.device, dtype=torch.long)
+        self.starting_action = inverse_mapping(self.pitch_action_space//2,self.yaw_action_space//2,self.yaw_action_space)
+        self.action = torch.tensor([[self.starting_action]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.history = []
         self.episode_rewards = []
@@ -96,9 +97,6 @@ class dqn_controller(Node):
         self.aqua_trajectory = []
         self.diver_trajectory = []
         self.evaluate = False 
-
-        #stopping conditions
-        self.empty_state_counter = 0
 
         self.root_path = 'src/aqua_rl/experiments/{}'.format(str(self.experiment_number))
         if os.path.exists(self.root_path):
@@ -286,20 +284,14 @@ class dqn_controller(Node):
         coords = np.array(coords.data)
         #check for null input from detection module
         if coords.sum() < 0:
-            self.empty_state_counter += 1
-            center = [-1, -1]
-        else:
-            self.empty_state_counter = 0
-            center = [(coords[2] + coords[0])/2, (coords[3] + coords[1])/2]
-
-        #if nothing has been detected in empty_state_max frames then reset
-        if self.empty_state_counter >= self.empty_state_max:
-            print("Nothing detected in state space for {} states".format(str(self.empty_state_max)))
+            print("Recieved null input from vision module. Terminating.")
             self.flush_commands = 0
             self.finished = True
             self.complete = False
             return
-        
+        else:
+            detected_center = [(coords[2] + coords[0])/2, (coords[3] + coords[1])/2]
+       
         if self.duration > (self.eval_duration if self.evaluate else self.train_duration):
             print("Duration Reached")
             self.flush_commands = 0
@@ -308,15 +300,15 @@ class dqn_controller(Node):
             return
         self.duration += 1
         
-        self.history.append(center)
+        self.history.append(detected_center)
         if len(self.history) == self.history_size:
             ns = np.array(self.history).flatten()
   
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
            
-            reward = reward_calculation(center, self.img_size, self.img_size, self.reward_sharpness, self.reward_sharpness)
+            reward = reward_calculation(detected_center, self.img_size, self.img_size)
             self.episode_rewards.append(reward)
-            self.reward = torch.tensor(reward, dtype=torch.float32, device=self.dqn.device)
+            self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
 
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
@@ -325,8 +317,7 @@ class dqn_controller(Node):
                 if self.state is not None:
                     self.dqn.memory.push(self.state, self.action, self.next_state, self.reward)
                     self.erm.push(self.state, self.action, self.next_state, self.reward)
-
-                self.action = self.dqn.select_action(self.next_state)       
+                self.action = self.dqn.select_action(self.next_state)  
                 self.state = self.next_state
                
                 #select adversary action
@@ -344,7 +335,7 @@ class dqn_controller(Node):
                         target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
                     self.dqn.target_net.load_state_dict(target_net_state_dict)
             
-            self.history.pop(0)
+            self.history = self.history[self.frame_skip:]
 
         #adversary action
         # x,y,z = adv_mapping(self.adv_action.detach().cpu().numpy()[0][0])
@@ -355,7 +346,7 @@ class dqn_controller(Node):
         
         #protagonist action
         action_idx = self.action.detach().cpu().numpy()[0][0]
-        pitch_idx, yaw_idx = action_mapping(action_idx, 5)
+        pitch_idx, yaw_idx = action_mapping(action_idx, self.yaw_action_space)
         self.command.pitch = self.pitch_actions[pitch_idx]
         self.command.yaw = self.yaw_actions[yaw_idx]            
         self.command.speed = hyperparams.speed_ #fixed speed
@@ -456,7 +447,7 @@ class dqn_controller(Node):
         self.state = None
         self.next_state = None
         
-        self.action = torch.tensor([[12]], device=self.dqn.device, dtype=torch.long)
+        self.action = torch.tensor([[self.starting_action]], device=self.dqn.device, dtype=torch.long)
         # self.adv_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.history = []
@@ -470,7 +461,6 @@ class dqn_controller(Node):
         self.flush_diver = 0
 
         #reset counters
-        self.empty_state_counter = 0
         self.duration = 0
 
         #reset end conditions 

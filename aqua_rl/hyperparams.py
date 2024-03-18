@@ -6,16 +6,16 @@ img_size_ = 416
 
 #control hyperparams
 pitch_limit_ = 0.05
-yaw_limit_ = 0.35
+yaw_limit_ = 0.25
 diver_max_speed_ = 0.25
 
 #dqn hyperparams
-history_size_ = 20
+history_size_ = 5
 yaw_action_space_ = 5
 pitch_action_space_ = 5
 
 #end of episode hyperparams
-empty_state_max_ = 20
+empty_state_max_ = 10
 depth_range_ = [-6, -12]
 train_duration_ = 2000
 
@@ -24,8 +24,9 @@ sharpness_ = 0.2
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 1
+experiment_number_ = 0
 train_for_ = 10
+frame_skip_ = 5
 
 #eval hyperparams
 eval_episode_ = -1
