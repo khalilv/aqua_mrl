@@ -86,6 +86,7 @@ class dqn_controller(Node):
         self.action = torch.tensor([[self.starting_action]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.history = []
+        self.action_history = [self.starting_action]
         self.episode_rewards = []
         self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
 
@@ -301,11 +302,10 @@ class dqn_controller(Node):
         self.duration += 1
         
         self.history.append(detected_center)
-        if len(self.history) == self.history_size:
-            ns = np.array(self.history).flatten()
-  
+        if len(self.history) == self.history_size and len(self.action_history) == self.history_size:
+            ns = np.concatenate((np.array(self.history).flatten(), np.array(self.action_history).flatten()))
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-           
+            
             reward = reward_calculation(detected_center, self.img_size, self.img_size)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
@@ -336,7 +336,7 @@ class dqn_controller(Node):
                     self.dqn.target_net.load_state_dict(target_net_state_dict)
             
             self.history = self.history[self.frame_skip:]
-
+            self.action_history = self.action_history[self.frame_skip:]
         #adversary action
         # x,y,z = adv_mapping(self.adv_action.detach().cpu().numpy()[0][0])
         # self.adv_command.current_x = self.adv_madnitude_x * x
@@ -346,6 +346,7 @@ class dqn_controller(Node):
         
         #protagonist action
         action_idx = self.action.detach().cpu().numpy()[0][0]
+        self.action_history.append(action_idx)
         pitch_idx, yaw_idx = action_mapping(action_idx, self.yaw_action_space)
         self.command.pitch = self.pitch_actions[pitch_idx]
         self.command.yaw = self.yaw_actions[yaw_idx]            
@@ -451,6 +452,7 @@ class dqn_controller(Node):
         # self.adv_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.history = []
+        self.action_history = [self.starting_action]
 
 
         #reset flush queues 

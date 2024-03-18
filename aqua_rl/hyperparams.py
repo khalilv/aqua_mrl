@@ -10,7 +10,7 @@ yaw_limit_ = 0.25
 diver_max_speed_ = 0.25
 
 #dqn hyperparams
-history_size_ = 5
+history_size_ = 20
 yaw_action_space_ = 5
 pitch_action_space_ = 5
 
