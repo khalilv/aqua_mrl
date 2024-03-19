@@ -10,7 +10,7 @@ yaw_limit_ = 0.25
 diver_max_speed_ = 0.25
 
 #dqn hyperparams
-history_size_ = 20
+history_size_ = 5
 yaw_action_space_ = 5
 pitch_action_space_ = 5
 
@@ -25,8 +25,8 @@ sharpness_ = 0.2
 #training hyperparams
 load_erm_ = True
 experiment_number_ = 0
-train_for_ = 10
-frame_skip_ = 5
+train_for_ = 25
+frame_skip_ = 4
 
 #eval hyperparams
 eval_episode_ = -1
@@ -58,4 +58,6 @@ else:
     imu_topic_name_ = '/aqua/pose'
     camera_topic_name_ = '/camera/left/image_raw/compressed'
     roll_gains_ = [0.25, 0.0, 0.75] #P,I,D
+    pitch_gains_ = [0.05, 0.0, 0.1] #P,I,D
+    yaw_gains_ = [0.15, 0.0, 0.1] #P,I,D
     speed_ = 0.25

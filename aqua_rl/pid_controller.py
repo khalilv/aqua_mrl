@@ -1,13 +1,19 @@
 import rclpy
+import torch
 import numpy as np 
 import os
+import subprocess
 from rclpy.node import Node
-from aqua2_interfaces.msg import Command, AquaPose
+from aqua2_interfaces.msg import Command, AquaPose, DiverCommand
+from ir_aquasim_interfaces.srv import SetPosition
+from geometry_msgs.msg import Pose
+from std_msgs.msg import Float32MultiArray
+from time import sleep, time
 from aqua_rl.control.PID import AnglePID, PID
-from std_msgs.msg import UInt8MultiArray, Float32
+from aqua_rl.control.DQN import ReplayMemory
+from aqua_rl.helpers import reward_calculation, action_mapping, inverse_mapping
 from aqua_rl import hyperparams
-from filterpy.kalman import KalmanFilter
-from filterpy.common import Q_discrete_white_noise
+from torch.utils.tensorboard import SummaryWriter 
 
 class pid_controller(Node):
     def __init__(self):
@@ -16,36 +22,42 @@ class pid_controller(Node):
         #hyperparams
         self.queue_size = hyperparams.queue_size_
         self.roll_gains = hyperparams.roll_gains_
-        self.img_size = hyperparams.img_size_
+        self.pitch_gains = hyperparams.pitch_gains_
+        self.yaw_gains = hyperparams.yaw_gains_
+        self.history_size = hyperparams.history_size_
+        self.pitch_limit = hyperparams.pitch_limit_
         self.yaw_limit = hyperparams.yaw_limit_
         self.yaw_action_space = hyperparams.yaw_action_space_
-        self.pitch_limit = hyperparams.pitch_limit_
         self.pitch_action_space = hyperparams.pitch_action_space_
-        self.target_depth = hyperparams.target_depth_
-        self.history_size = hyperparams.history_size_
-        self.frames_to_skip = hyperparams.frames_to_skip_
+        self.img_size = hyperparams.img_size_
+        self.depth_range = hyperparams.depth_range_
+        self.train_duration = hyperparams.train_duration_
+        self.diver_max_speed = hyperparams.diver_max_speed_
+        self.frame_skip = hyperparams.frame_skip_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
-        self.segmentation_subscriber = self.create_subscription(
-            UInt8MultiArray, 
-            '/segmentation', 
-            self.segmentation_callback, 
+        self.detection_subscriber = self.create_subscription(
+            Float32MultiArray, 
+            '/diver/coordinates', 
+            self.detection_callback, 
             self.queue_size)
-        self.depth_subscriber = self.create_subscription(Float32, '/aqua/depth', self.depth_callback, self.queue_size)
-
+        self.diver_publisher = self.create_publisher(DiverCommand, 'diver_control', self.queue_size)
+        self.diver_pose_subscriber = self.create_subscription(
+            AquaPose,
+            hyperparams.diver_topic_name_,
+            self.diver_pose_callback,
+            self.queue_size)
+        
         #initialize pid controllers
         self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
-        self.pitch_pid = PID(target = 0.0, gains = [0.005, 0.0, 0.175])
-        self.yaw_pid = PID(target = 0.0, gains = [0.6, 0.0, 1.1], reverse=True, normalization_factor=64)
+        self.pitch_pid = PID(target = self.img_size/2, gains = self.pitch_gains, reverse=True, normalization_factor=self.img_size/2)
+        self.yaw_pid = PID(target = self.img_size/2, gains = self.yaw_gains, reverse=True, normalization_factor=self.img_size/2)
         self.measured_roll_angle = None
-        self.relative_depth = None
 
         self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
         self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
-        self.yaw_action_idx = 1
-        self.pitch_action_idx = 1
 
         #initialize command
         self.command = Command()
@@ -54,217 +66,220 @@ class pid_controller(Node):
         self.command.pitch = 0.0
         self.command.yaw = 0.0
         self.command.heave = 0.0
+        
+        #command
+        self.diver_cmd = DiverCommand()
+        self.diver_pose = None
+        
+        #flush queues
+        self.flush_steps = self.queue_size + 30
+        self.flush_commands = self.flush_steps
+        self.zero_command_steps = int(self.flush_commands / 5)
+        self.zero_commands = 0
+        self.flush_imu = 0
+        self.flush_diver = 0
+        self.flush_detection = 0
 
         #state and depth history
-        self.image_history = []
-        self.depth_history = []
-        self.action_history = [4]
-        self.action = 4
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.history = []
+        self.episode_rewards = []
+        self.starting_action = inverse_mapping(self.pitch_action_space//2,self.yaw_action_space//2,self.yaw_action_space)
+        self.action = torch.tensor([[self.starting_action]], device=self.device, dtype=torch.long)
+        self.action_history = [self.starting_action]
+        self.erm = ReplayMemory(10000)
         self.state = None
-        self.state_depths = None
-        self.state_actions = None
-        
-        self.save_expert_data = True
-        self.expert_dataset_path = 'src/aqua_rl/pid_expert/'
-        if not os.path.exists(self.expert_dataset_path):
-            os.mkdir(self.expert_dataset_path)
-            os.mkdir(os.path.join(self.expert_dataset_path, 'state'))
-            os.mkdir(os.path.join(self.expert_dataset_path, 'state_depths'))
-            os.mkdir(os.path.join(self.expert_dataset_path, 'state_actions'))
-            os.mkdir(os.path.join(self.expert_dataset_path, 'actions'))
-            self.num_samples = 0
-        else:
-            self.num_samples = len(os.listdir(os.path.join(self.expert_dataset_path, 'state/')))
-            print('Samples collected: ', self.num_samples)
+        self.next_state = None
+        self.reward = None
 
-        #init kalman filter for tracking waypoint
-        self.use_kalman = True
-        self.kalman = KalmanFilter(dim_x=2, dim_z=1)
-        self.kalman.x = np.zeros(2) #position and velocity. init both to 0
-        self.kalman.F = np.array([[1.,1.],[0.,1.]]) #state transition matrix
-        self.kalman.H = np.array([[1.,0.]]) #measurement function. only measure position
-        self.kalman.P *= np.array([[100.,0.],[0., 1000.]]) #covariance matrix give high uncertainty to unobservable initial velocities
-        self.kalman.R = 1 #measurement noise in px
-        self.kalman.Q = Q_discrete_white_noise(dim=2, dt=0.02, var=0.13)
-        self.current_error = 0.0
-                            
+        self.aqua_trajectory = []
+        self.diver_trajectory = []
+
+        self.duration = 0
+        self.finished = False
+        self.complete = False
+
+        self.timer = self.create_timer(5, self.publish_diver_command)
+
         print('Initialized: PID controller')
   
     def imu_callback(self, imu):
+        
+        #finished flag
+        if self.finished:
+            return
+        
+        #flush queue
+        if self.flush_imu < self.flush_steps:
+            self.flush_imu += 1
+            return
+        
         self.measured_roll_angle = self.calculate_roll(imu)
+
+        self.aqua_trajectory.append([imu.x, imu.y, imu.z])
         return
             
-    def depth_callback(self, depth):
-        self.relative_depth = self.target_depth + depth.data
-        return
+    def publish_diver_command(self):     
+        if self.diver_pose:
 
+            #scale vector to current magnitude
+            self.diver_cmd.vx = np.random.uniform(hyperparams.speed_, hyperparams.speed_+0.1)
+            self.diver_cmd.vy = np.random.uniform(-1,1)
+            self.diver_cmd.vz = np.random.uniform(-1,1)
+
+            speed = np.sqrt(np.square(self.diver_cmd.vy) + np.square(self.diver_cmd.vz))
+            if speed > self.diver_max_speed:
+                self.diver_cmd.vy = self.diver_cmd.vy * self.diver_max_speed/speed
+                self.diver_cmd.vz = self.diver_cmd.vz * self.diver_max_speed/speed
+                
+            if self.diver_pose[1] > self.depth_range[0] and self.diver_cmd.vy > 0:
+                self.diver_cmd.vy *= -1
+            elif self.diver_pose[1] < self.depth_range[1] and self.diver_cmd.vy < 0:
+                self.diver_cmd.vy *= -1
+
+            #publish
+            self.diver_publisher.publish(self.diver_cmd)
+            print('Publishing diver command')
+
+            return 
+    
+
+    def diver_pose_callback(self, pose):    
+        
+        #finished flag
+        if self.finished:
+            return
+        
+        #flush queue
+        if self.flush_diver < self.flush_steps:
+            self.flush_diver += 1
+            return 
+           
+        self.diver_pose = [pose.x, pose.y, pose.z]
+        self.diver_trajectory.append(self.diver_pose)
+
+        return 
+    
     def calculate_roll(self, imu):
         return imu.roll
         
-    def segmentation_callback(self, seg_map):
+    def detection_callback(self, coords):
         
-        #return if depth or roll angle has not been measured
-        if self.relative_depth is None or self.measured_roll_angle is None:
+        #flush detections queue
+        if self.flush_detection< self.flush_steps:
+            self.flush_detection += 1
+            return
+
+        #flush out command queue
+        if self.flush_commands < self.flush_steps:
+            if self.zero_commands < self.zero_command_steps:
+                self.command.speed = hyperparams.speed_ 
+                self.command.roll = 0.0
+                self.command.pitch = 0.0
+                self.command.yaw = 0.0
+                self.command.heave = 0.0
+                self.command_publisher.publish(self.command)
+                # #reset adv
+                # self.adv_command.current_x = 0.0
+                # self.adv_command.current_z = 0.0
+                # self.adv_command.current_y = 0.0
+                # self.adv_command_publisher.publish(self.adv_command)
+                self.zero_commands += 1
+            self.flush_commands += 1
             return
         
-        seg_map = np.array(seg_map.data).reshape(self.img_size)
-        self.depth_history.append(self.relative_depth)
-        self.image_history.append(seg_map)
-        if len(self.image_history) == self.history_size and len(self.depth_history) == self.history_size and len(self.action_history) == self.history_size:
-            self.state = np.array(self.image_history)
-            self.state_depths = np.array(self.depth_history)
-            self.state_actions = np.array(self.action_history)
-
-            #ransac on mask
-            try:
-                r, theta, _ = self.ransac(seg_map, tau = 15, iters = 50)
-            except AssertionError:
-                print('Nothing detected')
-                return
-            
-            #calculate error
-            errors = self.line_to_error(r, theta)
-
-            #kalman filter predict
-            self.kalman.predict()
-
-            #select waypoint from candidates. select higher point. 
-            #in horizontal case this may cause switching
-            if np.abs(errors[0]) < np.abs(errors[1]):
-                er = errors[0]
-            else:
-                er = errors[1]
-            
-            if self.use_kalman:
-                self.kalman.update(er) #update kalman filter with measurement
-                self.current_error = self.kalman.x[0] #read updated state   
-            else:
-                self.current_error = er
-            
-            self.yaw_action_idx = self.discretize(self.yaw_pid.control(self.current_error), self.yaw_actions)
-            self.pitch_action_idx = self.discretize(self.pitch_pid.control(self.relative_depth), self.pitch_actions)
-            self.action = int(self.pitch_action_idx*self.yaw_action_space) + self.yaw_action_idx
-            
-            if self.save_expert_data:
-                with open(os.path.join(self.expert_dataset_path, 'state') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as s:
-                    np.save(s,self.state)
-                with open(os.path.join(self.expert_dataset_path, 'state_depths') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as sd:
-                    np.save(sd, self.state_depths)
-                with open(os.path.join(self.expert_dataset_path, 'state_actions') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as sa:
-                    np.save(sa, self.state_actions)
-                with open(os.path.join(self.expert_dataset_path, 'actions') + '/{}.npy'.format(str(self.num_samples).zfill(5)), 'wb') as a:
-                    np.save(a, self.action)
-                self.num_samples += 1
-            
-            self.image_history = self.image_history[self.frames_to_skip:]
-            self.depth_history = self.depth_history[self.frames_to_skip:]
-            self.action_history = self.action_history[self.frames_to_skip:]
+        #if finished, reset simulation
+        if self.finished:
+            self.finish()
+            return
         
-        self.action_history.append(self.action)
-        self.command.speed = 0.25 #fixed speed
-        self.command.yaw = self.yaw_actions[self.yaw_action_idx]
-        self.command.pitch = self.pitch_actions[self.pitch_action_idx]
+        coords = np.array(coords.data)
+        #check for null input from detection module
+        if coords.sum() < 0:
+            print("Recieved null input from vision module. Terminating.")
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = False
+            return
+        else:
+            detected_center = [(coords[2] + coords[0])/2, (coords[3] + coords[1])/2]
+       
+        if self.duration > self.train_duration:
+            print("Duration Reached")
+            self.flush_commands = 0
+            self.finished = True
+            self.complete = True
+            return
+        self.duration += 1
+        
+        self.history.append(detected_center)
+        if len(self.history) == self.history_size and len(self.action_history) == self.history_size:
+            ns = np.concatenate((np.array(self.history).flatten(), np.array(self.action_history).flatten()))
+            self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.device).unsqueeze(0)
+            
+            reward = reward_calculation(detected_center, self.img_size, self.img_size)
+            self.episode_rewards.append(reward)
+            self.reward = torch.tensor([reward], dtype=torch.float32, device=self.device)
+
+            if self.state is not None:
+                self.erm.push(self.state, self.action, self.next_state, self.reward)
+            
+            pitch_idx = self.discretize(self.pitch_pid.control(detected_center[1]), self.pitch_actions)
+            yaw_idx = self.discretize(self.yaw_pid.control(detected_center[0]), self.yaw_actions)
+            action_idx = inverse_mapping(pitch_idx, yaw_idx, self.yaw_action_space)
+            self.action = torch.tensor([[action_idx]], device=self.device, dtype=torch.long)
+            self.state = self.next_state
+            
+            self.history = self.history[self.frame_skip:]
+            self.action_history = self.action_history[self.frame_skip:]
+        
+        #adversary action
+        # x,y,z = adv_mapping(self.adv_action.detach().cpu().numpy()[0][0])
+        # self.adv_command.current_x = self.adv_madnitude_x * x
+        # self.adv_command.current_z = self.adv_madnitude_z * z
+        # self.adv_command.current_y = self.adv_madnitude_y * y 
+        # self.adv_command_publisher.publish(self.adv_command)
+        
+        #protagonist action
+        action_idx = self.action.detach().cpu().numpy()[0][0]
+        self.action_history.append(action_idx)
+        pitch_idx, yaw_idx = action_mapping(action_idx, self.yaw_action_space)
+        self.command.pitch = self.pitch_actions[pitch_idx]
+        self.command.yaw = self.yaw_actions[yaw_idx]            
+        self.command.speed = hyperparams.speed_ #fixed speed
         self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-        self.command.heave = 0.0
         self.command_publisher.publish(self.command)
-
-        return
-
-    def create_grid(self, seg_map, n, thresh):
-        block_size = (seg_map.shape[0] // n, seg_map.shape[1] // n)
-        # reshape into a 5x5 grid and sum pizels
-        grid = seg_map[:n * block_size[0], :n * block_size[1]].reshape(n, block_size[0], n, block_size[1]).sum(axis=(1, 3))
-        #define threshold number of pixels
-        n_thresh = thresh * block_size[0] * block_size[1]
-        # populate the grid based on the threshold
-        grid = (grid > n_thresh).astype(int)
-        #error = (5 - np.sum(grid[:,2])) * (0.1*((np.sum(grid[:,0:2])) - (np.sum(grid[:,3:5]))))
-        return grid
+        return 
     
     def discretize(self, v, l):
         index = np.argmin(np.abs(np.subtract(l,v)))
         return index
     
-    def line_to_error(self, r, theta):
-        w = self.img_size[1]
-        h = self.img_size[0]
-        errors = []
-        if theta != 0:
-            #right border of image
-            y = (r - w*np.cos(theta))/np.sin(theta)
-            if y > 0 and y <= h:
-                errors.append(w/2 + y)
-
-            #left border of image
-            y = r/np.sin(theta)
-            if y > 0 and y <= h:
-                errors.append(-w/2 - y)
-
-        #bottom border of image
-        x = (r - h*np.sin(theta))/np.cos(theta)
-        if x >= 0 and x <= w:
-            if x < w/2:
-                errors.append(-w/2 - h - x)
-            else:
-                errors.append(w/2 + h + (w - x))
+    def finish(self):
+         
+        self.episode_rewards = np.array(self.episode_rewards)
+        print('Episode rewards. Average: ', np.mean(self.episode_rewards), ' Sum: ', np.sum(self.episode_rewards))
         
-        #top border of image
-        x = r/np.cos(theta)
-        if x >= 0 and x <= w:
-            errors.append(x - w/2)
+       
+        if self.state is not None and not self.complete:
+            self.erm.push(self.state, self.action, None, self.reward)
 
-        return errors
-    
-    def error_to_boundary_point(self, error):
-        w = self.img_size[1]
-        h = self.img_size[0]
-        if error >= -w/2 and error <= w/2: #top
-            return [int(error + w/2),0]
-        elif error > w/2 and error <= w/2 + h: #right
-            return [w, int(error - w/2)]
-        elif error < -w/2 and error >= -w/2 - h: #left
-            return [0, int(-error - w/2)]
-        elif error > 0: #bottom
-            return [int(h + w/2 + w - error), h]
-        else:
-            return [int(-w/2 - h - error), h]
         
-    def ransac(self, mask, tau, iters):
-        argmask = np.argwhere(mask)
-        assert len(argmask) > 2 # not enough points to fit a line
-        max_cset = 0
-        rho = None
-        theta = None
-        for _ in range(iters):
-            point_indicies = np.random.choice(len(argmask), 2, False)
-            p1 = argmask[point_indicies[0]]
-            p2 = argmask[point_indicies[1]]
-            r, t = self.fit_polar(p1, p2)
-            dist_to_line = np.abs(argmask[:,1]*np.cos(t) + argmask[:,0]*np.sin(t) - r)
-            len_cset = (dist_to_line < tau).sum()
-            if len_cset > max_cset and len_cset > self.min_cset():
-                max_cset = len_cset
-                rho, theta = r , t
-        assert rho is not None
-        assert theta is not None
-        return rho, theta, max_cset
-    
-    #minimum size for consensus set 
-    def min_cset(self):
-        #TODO
-        return 0
-    
-    #fit a polar line through two cartesian points. theta in [-pi/2, pi/2]
-    def fit_polar(self, p1, p2):
-        delta_x = (p1[1]-p2[1])
-        delta_y = (p2[0]-p1[0])
-        if delta_y == 0:
-            t = np.pi/2 * np.sign(delta_x)
-        else:
-            t = np.arctan((p1[1]-p2[1])/(p2[0]-p1[0]))
-        r = p1[1]*np.cos(t) + p1[0]*np.sin(t)
-        return r, t
-    
+        torch.save({
+            'memory': self.erm
+        }, 'pid_expert.pt')
+        
+        with open('pid_traj.npy', 'wb') as f:
+            np.save(f, self.episode_rewards)
+            np.save(f, np.array(self.aqua_trajectory))
+            np.save(f, np.array(self.diver_trajectory))
+
+        print('Saved data. Kill node now.')
+        input()
+
+        return
+
+       
 def main(args=None):
     rclpy.init(args=args)
 

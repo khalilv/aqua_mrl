@@ -3,6 +3,7 @@ import torch
 import numpy as np 
 import os
 import subprocess
+import shutil
 from rclpy.node import Node
 from aqua2_interfaces.msg import Command, AquaPose, DiverCommand
 from ir_aquasim_interfaces.srv import SetPosition
@@ -34,7 +35,6 @@ class dqn_controller(Node):
         self.train_for = hyperparams.train_for_
         self.train_duration = hyperparams.train_duration_
         self.eval_duration = hyperparams.eval_duration_
-        self.depth_range = hyperparams.depth_range_
         self.diver_max_speed = hyperparams.diver_max_speed_
         self.reward_sharpness = hyperparams.sharpness_
         self.frame_skip = hyperparams.frame_skip_
@@ -155,6 +155,22 @@ class dqn_controller(Node):
             self.writer = SummaryWriter(os.path.join(self.root_path, 'logs'))
             self.episode = 0
             self.stop_episode = self.episode + self.train_for
+            
+            self.expert_path = 'src/aqua_rl/expert_data/pid/{}_{}'.format(self.history_size, self.frame_skip)
+            for file_path in os.listdir(self.expert_path):
+                shutil.copyfile(os.path.join(self.expert_path, file_path), os.path.join(self.save_memory_path, file_path))
+
+            print('Loading ERM from expert experience. Note this may take time')
+            t0 = time()
+            for file_path in sorted(os.listdir(self.save_memory_path), reverse=True):
+                if os.path.isfile(os.path.join(self.save_memory_path, file_path)):
+                    if self.dqn.memory.__len__() < self.dqn.MEMORY_SIZE:
+                        memory = torch.load(os.path.join(self.save_memory_path, file_path), map_location=self.dqn.device)
+                        erm = memory['memory']
+                        self.dqn.memory.memory += erm.memory
+            t1 = time()
+            print('ERM size: ', self.dqn.memory.__len__(), '. Time taken to load: ', t1 - t0)
+            
             # torch.save({
             #     'training_steps': self.dqn_adv.steps_done,
             #     'model_state_dict_policy': self.dqn_adv.policy_net.state_dict(),
@@ -212,7 +228,7 @@ class dqn_controller(Node):
         if self.diver_pose:
 
             #scale vector to current magnitude
-            self.diver_cmd.vx = 0.35
+            self.diver_cmd.vx = np.random.uniform(hyperparams.speed_, hyperparams.speed_+0.1)
             self.diver_cmd.vy = np.random.uniform(-1,1)
             self.diver_cmd.vz = np.random.uniform(-1,1)
 

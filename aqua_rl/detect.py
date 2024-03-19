@@ -29,15 +29,15 @@ class detect(Node):
         self.coords = Float32MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
         self.model = YoloV7(Namespace(half=False,
-                            confidence_threshold=0.75, 
-                            iou_threshold = 0.2,
+                            confidence_threshold=0.7, 
+                            iou_threshold = 0.1,
                             weights = 'src/aqua_rl/aqua_rl/YOLOv7/weights/diver.pt',
                             image_size = self.img_size, 
                             trace = True, 
                             verbose = False,
                             track=True,
-                            min_hits=5,
-                            max_age=20))
+                            min_hits=3,
+                            max_age=10))
         
         #online dataset collection
         self.dataset_path = 'src/aqua_rl/diver_dataset/'
