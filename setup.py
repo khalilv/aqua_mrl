@@ -37,6 +37,7 @@ setup(
             'teleop_controller = aqua_rl.teleop_controller:main',
             'detect = aqua_rl.detect:main',
             'diver_controller = aqua_rl.diver_controller:main',
+            'autopilot = aqua_rl.autopilot:main',
 
         ],
     },

@@ -5,8 +5,8 @@ queue_size_ = 5
 img_size_ = 416
 
 #control hyperparams
-pitch_limit_ = 0.05
-yaw_limit_ = 0.25
+pitch_angle_limit_ = 10
+yaw_angle_limit_ = 10
 diver_max_speed_ = 0.25
 
 #dqn hyperparams
@@ -60,4 +60,7 @@ else:
     roll_gains_ = [0.25, 0.0, 0.75] #P,I,D
     pitch_gains_ = [0.05, 0.0, 0.1] #P,I,D
     yaw_gains_ = [0.15, 0.0, 0.1] #P,I,D
+    autopilot_pitch_gains_ = [0.5181, 0.0, 0.9] #P,I,D
+    autopilot_yaw_gains_ = [0.5181, 0.0, 0.0] #P,I,D
+    autopilot_command_ = '/autopilot/command'
     speed_ = 0.25
