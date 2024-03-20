@@ -117,8 +117,8 @@ def analyze_erm(erm_path):
     from aqua_rl.control.DQN import ReplayMemory, Transition
     from matplotlib import pyplot as plt
     history_size = hyperparams.history_size_
-    yaw_actions = np.linspace(-hyperparams.yaw_limit_, hyperparams.yaw_limit_, hyperparams.yaw_action_space_)
-    pitch_actions = np.linspace(-hyperparams.pitch_limit_, hyperparams.pitch_limit_, hyperparams.pitch_action_space_)
+    yaw_actions = np.linspace(-hyperparams.yaw_angle_limit_, hyperparams.yaw_angle_limit_, hyperparams.yaw_action_space_)
+    pitch_actions = np.linspace(-hyperparams.pitch_angle_limit_, hyperparams.pitch_angle_limit_, hyperparams.pitch_action_space_)
     erm = ReplayMemory(10000)
     memory = torch.load(erm_path, map_location= torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     erm = memory['memory']
@@ -126,7 +126,10 @@ def analyze_erm(erm_path):
         transition = erm.sample(1)
         transition = Transition(*zip(*transition))
         state = torch.cat(transition.state).detach().cpu().numpy()
-        next_state = torch.cat(transition.next_state).detach().cpu().numpy()
+        try:
+            next_state = torch.cat(transition.next_state).detach().cpu().numpy()
+        except:
+            continue
         action = torch.cat(transition.action).detach().cpu().numpy()
         reward = torch.cat(transition.reward).detach().cpu().numpy()
         sx,sy = state[0][0:int(history_size*2):2], state[0][1:int(history_size*2)+1:2]
@@ -147,16 +150,16 @@ def analyze_erm(erm_path):
         pitch = pitch_actions[pitch_idx]
         yaw = yaw_actions[yaw_idx]
         if pitch < 0:
-            title += "(pitch up, "
+            title += "(pitch {} up, ".format(np.abs(pitch))
         elif pitch > 0:
-            title += "(pitch down, "
+            title += "(pitch {} down, ".format(np.abs(pitch))
         elif pitch == 0.0:
             title += "(no pitch, "
 
         if yaw < 0:
-            title += "yaw left)"
+            title += "yaw {} left) ".format(np.abs(yaw))
         elif yaw > 0:
-            title += "yaw right) "
+            title += "yaw {} right) ".format(np.abs(yaw))
         elif yaw == 0.0:
             title += "no yaw) "
 
@@ -219,5 +222,5 @@ episode = 296
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
-analyze_erm('/usr/local/data/kvirji/AQUA/aquasim_ws/pid_expert.pt')
+analyze_erm('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/0/erm/episode_00050.pt')
 

@@ -5,14 +5,13 @@ import os
 import subprocess
 import shutil
 from rclpy.node import Node
-from aqua2_interfaces.msg import Command, AquaPose, DiverCommand
+from aqua2_interfaces.msg import AquaPose, DiverCommand
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, UInt8, Bool
 from time import sleep, time
-from aqua_rl.control.PID import AnglePID
 from aqua_rl.control.DQN import DQN, ReplayMemory
-from aqua_rl.helpers import reward_calculation, action_mapping, inverse_mapping
+from aqua_rl.helpers import reward_calculation
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
@@ -22,10 +21,7 @@ class dqn_controller(Node):
 
         #hyperparams
         self.queue_size = hyperparams.queue_size_
-        self.roll_gains = hyperparams.roll_gains_
         self.history_size = hyperparams.history_size_
-        self.pitch_limit = hyperparams.pitch_limit_
-        self.yaw_limit = hyperparams.yaw_limit_
         self.yaw_action_space = hyperparams.yaw_action_space_
         self.pitch_action_space = hyperparams.pitch_action_space_
         self.img_size = hyperparams.img_size_
@@ -45,8 +41,9 @@ class dqn_controller(Node):
         # self.adv_madnitude_z = hyperparams.adv_magnitude_z_
 
         #subscribers and publishers
-        self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
+        self.command_publisher = self.create_publisher(UInt8, hyperparams.autopilot_command_, self.queue_size)
+        self.autopilot_start_stop_publisher = self.create_publisher(Bool, hyperparams.autopilot_start_stop_, self.queue_size)
         self.detection_subscriber = self.create_subscription(
             Float32MultiArray, 
             '/diver/coordinates', 
@@ -62,9 +59,6 @@ class dqn_controller(Node):
 
         #flush queues
         self.flush_steps = self.queue_size + 30
-        self.flush_commands = self.flush_steps
-        self.zero_command_steps = int(self.flush_commands / 5)
-        self.zero_commands = 0
         self.flush_imu = 0
         self.flush_diver = 0
         self.flush_detection = 0
@@ -73,20 +67,13 @@ class dqn_controller(Node):
         self.finished = False
         self.complete = False
 
-        self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
-        self.measured_roll_angle = 0.0
-
         #dqn controller for yaw and pitch 
-        self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
-        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
         self.dqn = DQN(self.pitch_action_space, self.yaw_action_space, self.history_size) 
         self.state = None
         self.next_state = None
-        self.starting_action = inverse_mapping(self.pitch_action_space//2,self.yaw_action_space//2,self.yaw_action_space)
-        self.action = torch.tensor([[self.starting_action]], device=self.dqn.device, dtype=torch.long)
+        self.action = None
         self.reward = None
         self.history = []
-        self.action_history = [self.starting_action]
         self.episode_rewards = []
         self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
 
@@ -157,19 +144,19 @@ class dqn_controller(Node):
             self.stop_episode = self.episode + self.train_for
             
             self.expert_path = 'src/aqua_rl/expert_data/pid/{}_{}'.format(self.history_size, self.frame_skip)
-            for file_path in os.listdir(self.expert_path):
-                shutil.copyfile(os.path.join(self.expert_path, file_path), os.path.join(self.save_memory_path, file_path))
-
-            print('Loading ERM from expert experience. Note this may take time')
-            t0 = time()
-            for file_path in sorted(os.listdir(self.save_memory_path), reverse=True):
-                if os.path.isfile(os.path.join(self.save_memory_path, file_path)):
-                    if self.dqn.memory.__len__() < self.dqn.MEMORY_SIZE:
-                        memory = torch.load(os.path.join(self.save_memory_path, file_path), map_location=self.dqn.device)
-                        erm = memory['memory']
-                        self.dqn.memory.memory += erm.memory
-            t1 = time()
-            print('ERM size: ', self.dqn.memory.__len__(), '. Time taken to load: ', t1 - t0)
+            if os.path.exists(self.expert_path):
+                for file_path in os.listdir(self.expert_path):
+                    shutil.copyfile(os.path.join(self.expert_path, file_path), os.path.join(self.save_memory_path, file_path))
+                print('Loading ERM from expert experience. Note this may take time')
+                t0 = time()
+                for file_path in sorted(os.listdir(self.save_memory_path), reverse=True):
+                    if os.path.isfile(os.path.join(self.save_memory_path, file_path)):
+                        if self.dqn.memory.__len__() < self.dqn.MEMORY_SIZE:
+                            memory = torch.load(os.path.join(self.save_memory_path, file_path), map_location=self.dqn.device)
+                            erm = memory['memory']
+                            self.dqn.memory.memory += erm.memory
+                t1 = time()
+                print('ERM size: ', self.dqn.memory.__len__(), '. Time taken to load: ', t1 - t0)
             
             # torch.save({
             #     'training_steps': self.dqn_adv.steps_done,
@@ -179,16 +166,13 @@ class dqn_controller(Node):
             # }, self.save_path +  '/adv/episode_{}.pt'.format(str(self.episode).zfill(5)))
             print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
         
-        #initialize command
-        self.command = Command()
-        self.command.speed = 0.0 
-        self.command.roll = 0.0
-        self.command.pitch = 0.0
-        self.command.yaw = 0.0
-        self.command.heave = 0.0
+        #autopilot commands
+        self.command = UInt8()
+        self.autopilot_flag = Bool()
+        self.autopilot_flag.data = False
         # self.adv_command = UnderwaterAdversaryCommand()
-
-        #command
+        
+        #diver command
         self.diver_cmd = DiverCommand()
         self.diver_pose = None
 
@@ -198,10 +182,9 @@ class dqn_controller(Node):
         #popen_called
         self.popen_called = False
 
-        #reset command
+        #reset commands
         self.reset_client = self.create_client(SetPosition, '/simulator/set_position')
         self.reset_req = SetPosition.Request()
-
         self.reset_diver_client = self.create_client(SetPosition, '/diver/set_position')
         self.reset_diver_req = SetPosition.Request()
 
@@ -219,8 +202,6 @@ class dqn_controller(Node):
             self.flush_imu += 1
             return
         
-        self.measured_roll_angle = self.calculate_roll(imu)
-
         self.aqua_trajectory.append([imu.x, imu.y, imu.z])
         return
     
@@ -228,7 +209,7 @@ class dqn_controller(Node):
         if self.diver_pose:
 
             #scale vector to current magnitude
-            self.diver_cmd.vx = np.random.uniform(hyperparams.speed_, hyperparams.speed_+0.1)
+            self.diver_cmd.vx = np.random.uniform(hyperparams.speed_, hyperparams.speed_+0.15)
             self.diver_cmd.vy = np.random.uniform(-1,1)
             self.diver_cmd.vz = np.random.uniform(-1,1)
 
@@ -265,34 +246,19 @@ class dqn_controller(Node):
 
         return 
     
-    def calculate_roll(self, imu):
-        return imu.roll
-    
+
     def detection_callback(self, coords):
         
         #flush detections queue
         if self.flush_detection< self.flush_steps:
             self.flush_detection += 1
             return
-
-        #flush out command queue
-        if self.flush_commands < self.flush_steps:
-            if self.zero_commands < self.zero_command_steps:
-                self.command.speed = hyperparams.speed_ 
-                self.command.roll = 0.0
-                self.command.pitch = 0.0
-                self.command.yaw = 0.0
-                self.command.heave = 0.0
-                self.command_publisher.publish(self.command)
-                # #reset adv
-                # self.adv_command.current_x = 0.0
-                # self.adv_command.current_z = 0.0
-                # self.adv_command.current_y = 0.0
-                # self.adv_command_publisher.publish(self.adv_command)
-                self.zero_commands += 1
-            self.flush_commands += 1
-            return
         
+        if not self.autopilot_flag.data:
+            print('starting autopilot')
+            self.autopilot_flag.data = True
+            self.autopilot_start_stop_publisher.publish(self.autopilot_flag)
+
         #if finished, reset simulation
         if self.finished:
             self.finish()
@@ -302,7 +268,6 @@ class dqn_controller(Node):
         #check for null input from detection module
         if coords.sum() < 0:
             print("Recieved null input from vision module. Terminating.")
-            self.flush_commands = 0
             self.finished = True
             self.complete = False
             return
@@ -311,15 +276,14 @@ class dqn_controller(Node):
        
         if self.duration > (self.eval_duration if self.evaluate else self.train_duration):
             print("Duration Reached")
-            self.flush_commands = 0
             self.finished = True
             self.complete = True
             return
         self.duration += 1
         
         self.history.append(detected_center)
-        if len(self.history) == self.history_size and len(self.action_history) == self.history_size:
-            ns = np.concatenate((np.array(self.history).flatten(), np.array(self.action_history).flatten()))
+        if len(self.history) == self.history_size:
+            ns = np.array(self.history).flatten()
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             
             reward = reward_calculation(detected_center, self.img_size, self.img_size)
@@ -338,6 +302,7 @@ class dqn_controller(Node):
                
                 #select adversary action
                 # self.adv_action = self.dqn_adv.select_eval_action(self.next_state, self.next_state_depths, self.next_state_actions)
+                
                 # Perform one step of the optimization (on the policy network)
                 if self.dqn.steps_done % 1 == 0:
                     loss = self.dqn.optimize()
@@ -351,27 +316,27 @@ class dqn_controller(Node):
                         target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
                     self.dqn.target_net.load_state_dict(target_net_state_dict)
             
+            #publish action
+            action_idx = self.action.detach().cpu().numpy()[0][0]
+            self.command.data = int(action_idx)
+            self.command_publisher.publish(self.command)
             self.history = self.history[self.frame_skip:]
-            self.action_history = self.action_history[self.frame_skip:]
+        
         #adversary action
         # x,y,z = adv_mapping(self.adv_action.detach().cpu().numpy()[0][0])
         # self.adv_command.current_x = self.adv_madnitude_x * x
         # self.adv_command.current_z = self.adv_madnitude_z * z
         # self.adv_command.current_y = self.adv_madnitude_y * y 
-        # self.adv_command_publisher.publish(self.adv_command)
-        
-        #protagonist action
-        action_idx = self.action.detach().cpu().numpy()[0][0]
-        self.action_history.append(action_idx)
-        pitch_idx, yaw_idx = action_mapping(action_idx, self.yaw_action_space)
-        self.command.pitch = self.pitch_actions[pitch_idx]
-        self.command.yaw = self.yaw_actions[yaw_idx]            
-        self.command.speed = hyperparams.speed_ #fixed speed
-        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-        self.command_publisher.publish(self.command)
+        # self.adv_command_publisher.publish(self.adv_command)   
         return 
     
     def finish(self):
+
+        #stop autopilot
+        print('stopping autopilot')
+        self.autopilot_flag.data = False
+        self.autopilot_start_stop_publisher.publish(self.autopilot_flag)
+        sleep(3.0)
 
         if self.popen_called:
             return 
@@ -450,11 +415,7 @@ class dqn_controller(Node):
         starting_diver_pose.orientation.w = 0.5022942
         self.reset_diver_req.pose = starting_diver_pose
         self.reset_diver_client.call_async(self.reset_diver_req)
-        sleep(1.0)
-
-        #reset pid controllers
-        self.measured_roll_angle = 0.0
-        self.roll_pid = AnglePID(target = 0.0, gains = self.roll_gains, reverse=True)
+        sleep(3.0)
 
         #reset trajectory
         self.aqua_trajectory = []
@@ -463,17 +424,13 @@ class dqn_controller(Node):
         #reset state and history queues
         self.state = None
         self.next_state = None
-        
-        self.action = torch.tensor([[self.starting_action]], device=self.dqn.device, dtype=torch.long)
-        # self.adv_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)
         self.reward = None
         self.history = []
-        self.action_history = [self.starting_action]
-
+        self.action = None
+        
+        # self.adv_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)
 
         #reset flush queues 
-        self.flush_commands = self.flush_steps
-        self.zero_commands = 0
         self.flush_imu = 0
         self.flush_detection = 0
         self.flush_diver = 0
@@ -488,7 +445,6 @@ class dqn_controller(Node):
         #reset diver pose
         self.diver_pose = None
 
-        
         return
     
 def main(args=None):

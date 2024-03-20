@@ -4,7 +4,7 @@ from rclpy.node import Node
 from aqua_rl.control.PID import AnglePID
 from aqua2_interfaces.msg import AquaPose, Command
 from aqua_rl import hyperparams
-from std_msgs.msg import Float32
+from std_msgs.msg import UInt8, Bool
 from aqua_rl.helpers import action_mapping
 
 class autopilot(Node):
@@ -15,9 +15,14 @@ class autopilot(Node):
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.action_subscriber = self.create_subscription(
-            Float32,
+            UInt8,
             hyperparams.autopilot_command_,
             self.action_callback,
+            self.queue_size)
+        self.start_stop_subscriber = self.create_subscription(
+            Bool,
+            hyperparams.autopilot_start_stop_,
+            self.start_stop_callback,
             self.queue_size)
         
         self.measured_roll_angle = None
@@ -47,17 +52,21 @@ class autopilot(Node):
         self.command.heave = 0.0
         self.command.speed = self.speed
 
+        self.publish_actions = False
+        
         print('Initialized: autopilot')
 
     def imu_callback(self, imu):
         self.measured_roll_angle = self.calculate_roll(imu)
         self.measured_pitch_angle = self.calculate_pitch(imu)
         self.measured_yaw_angle = self.calculate_yaw(imu)
-
-        self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
-        self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-        self.command.yaw = self.yaw_pid.control(self.measured_yaw_angle)
-        self.command_publisher.publish(self.command)
+        
+        if self.publish_actions:
+            self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
+            self.command.roll = self.roll_pid.control(self.measured_roll_angle)
+            self.command.yaw = self.yaw_pid.control(self.measured_yaw_angle)
+            self.command_publisher.publish(self.command)
+        
         return
     
     def action_callback(self, a):
@@ -69,6 +78,22 @@ class autopilot(Node):
         self.yaw_pid.target += yaw_offset
         return
 
+    def start_stop_callback(self, flag):
+        if flag.data:
+            self.publish_actions = True
+            self.pitch_pid.target = 0.0
+            self.yaw_pid.target = 90.0
+        else:
+            self.publish_actions = False
+            for _ in range(10):
+                self.command.pitch = 0.0
+                self.command.yaw = 0.0
+                self.command.roll = 0.0
+                self.command.heave = 0.0
+                self.command.speed = self.speed
+                self.command_publisher.publish(self.command)
+        return
+    
     def calculate_roll(self, imu):
         return imu.roll
     

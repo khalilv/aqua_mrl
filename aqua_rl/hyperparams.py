@@ -5,12 +5,12 @@ queue_size_ = 5
 img_size_ = 416
 
 #control hyperparams
-pitch_angle_limit_ = 10
-yaw_angle_limit_ = 10
+pitch_angle_limit_ = 7.5
+yaw_angle_limit_ = 25
 diver_max_speed_ = 0.25
 
 #dqn hyperparams
-history_size_ = 5
+history_size_ = 15
 yaw_action_space_ = 5
 pitch_action_space_ = 5
 
@@ -26,7 +26,7 @@ sharpness_ = 0.2
 load_erm_ = True
 experiment_number_ = 0
 train_for_ = 25
-frame_skip_ = 4
+frame_skip_ = 15
 
 #eval hyperparams
 eval_episode_ = -1
@@ -63,4 +63,5 @@ else:
     autopilot_pitch_gains_ = [0.5181, 0.0, 0.9] #P,I,D
     autopilot_yaw_gains_ = [0.5181, 0.0, 0.0] #P,I,D
     autopilot_command_ = '/autopilot/command'
+    autopilot_start_stop_ = '/autopilot/start_stop'
     speed_ = 0.25

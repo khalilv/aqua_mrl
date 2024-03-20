@@ -32,7 +32,9 @@ class DQNNetwork(nn.Module):
         super(DQNNetwork, self).__init__()
         
         self.fc = nn.Sequential(
-            nn.Linear(in_features= history * 3, out_features= 256),
+            nn.Linear(in_features= history * 2, out_features= 512),
+            nn.ReLU(),
+            nn.Linear(in_features= 512, out_features= 256),
             nn.ReLU(),
             nn.Linear(in_features= 256, out_features= 128),
             nn.ReLU(),
@@ -53,10 +55,10 @@ class DQN:
         self.GAMMA = 0.99
         self.EPS_START = 0.8
         self.EPS_END = 0.1
-        self.EPS_DECAY = 100000
+        self.EPS_DECAY = 10000
         self.TAU = 0.002
-        LR = 1e-3
-        self.MEMORY_SIZE = 50000
+        LR = 1e-4
+        self.MEMORY_SIZE = 10000
         self.n_pitch_actions = n_pitch_actions
         self.n_yaw_actions = n_yaw_actions
         self.history_size = history_size
