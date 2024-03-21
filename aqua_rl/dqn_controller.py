@@ -273,17 +273,17 @@ class dqn_controller(Node):
         #check for null input from detection module
         if coords[0] == -1 and coords[1] == -1 and coords[2] == -1 and coords[3] == -1:
             self.empty_state_counter += 1
+            detected_center = [-1, -1]
         else:
             self.empty_state_counter = 0
-
-        detected_center = [(coords[1] + coords[3])/2, (coords[0] + coords[2])/2]
-
+            detected_center = [(coords[1] + coords[3])/2, (coords[0] + coords[2])/2]
+        
         if self.empty_state_counter > self.empty_state_max:
             print("Lost target. Resetting")
             self.finished = True
             self.complete = False
             return
-       
+
         if self.duration > (self.eval_duration if self.evaluate else self.train_duration):
             print("Duration Reached")
             self.finished = True
@@ -306,6 +306,7 @@ class dqn_controller(Node):
                 self.pitch_action, self.yaw_action = self.dqn.select_eval_action(self.next_state)
             else:
                 if self.state is not None:
+                    print(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
                     self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
                     self.erm.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
                 
