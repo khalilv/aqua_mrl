@@ -8,7 +8,7 @@ from rclpy.node import Node
 from aqua2_interfaces.msg import AquaPose, DiverCommand
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
-from std_msgs.msg import Float32MultiArray, UInt8, Bool
+from std_msgs.msg import Float32MultiArray, UInt8MultiArray, Bool
 from time import sleep, time
 from aqua_rl.control.DQN import DQN, ReplayMemory
 from aqua_rl.helpers import reward_calculation
@@ -34,6 +34,7 @@ class dqn_controller(Node):
         self.diver_max_speed = hyperparams.diver_max_speed_
         self.reward_sharpness = hyperparams.sharpness_
         self.frame_skip = hyperparams.frame_skip_
+        self.empty_state_max = hyperparams.empty_state_max_
         # self.switch_every = hyperparams.switch_every_
         # self.adv_action_space = hyperparams.adv_action_space_
         # self.adv_madnitude_x = hyperparams.adv_magnitude_x_
@@ -42,7 +43,7 @@ class dqn_controller(Node):
 
         #subscribers and publishers
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
-        self.command_publisher = self.create_publisher(UInt8, hyperparams.autopilot_command_, self.queue_size)
+        self.command_publisher = self.create_publisher(UInt8MultiArray, hyperparams.autopilot_command_, self.queue_size)
         self.autopilot_start_stop_publisher = self.create_publisher(Bool, hyperparams.autopilot_start_stop_, self.queue_size)
         self.detection_subscriber = self.create_subscription(
             Float32MultiArray, 
@@ -71,8 +72,10 @@ class dqn_controller(Node):
         self.dqn = DQN(self.pitch_action_space, self.yaw_action_space, self.history_size) 
         self.state = None
         self.next_state = None
-        self.action = None
-        self.reward = None
+        self.pitch_action = None        
+        self.yaw_action = None
+        self.pitch_reward = None
+        self.yaw_reward = None
         self.history = []
         self.episode_rewards = []
         self.erm = ReplayMemory(self.dqn.MEMORY_SIZE)
@@ -167,7 +170,7 @@ class dqn_controller(Node):
             print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
         
         #autopilot commands
-        self.command = UInt8()
+        self.command = UInt8MultiArray()
         self.autopilot_flag = Bool()
         self.autopilot_flag.data = False
         # self.adv_command = UnderwaterAdversaryCommand()
@@ -178,6 +181,7 @@ class dqn_controller(Node):
 
         #duration counting
         self.duration = 0
+        self.empty_state_counter = 0
 
         #popen_called
         self.popen_called = False
@@ -265,14 +269,20 @@ class dqn_controller(Node):
             return
         
         coords = np.array(coords.data)
+        
         #check for null input from detection module
-        if coords.sum() < 0:
-            print("Recieved null input from vision module. Terminating.")
+        if coords[0] == -1 and coords[1] == -1 and coords[2] == -1 and coords[3] == -1:
+            self.empty_state_counter += 1
+        else:
+            self.empty_state_counter = 0
+
+        detected_center = [(coords[1] + coords[3])/2, (coords[0] + coords[2])/2]
+
+        if self.empty_state_counter > self.empty_state_max:
+            print("Lost target. Resetting")
             self.finished = True
             self.complete = False
             return
-        else:
-            detected_center = [(coords[2] + coords[0])/2, (coords[3] + coords[1])/2]
        
         if self.duration > (self.eval_duration if self.evaluate else self.train_duration):
             print("Duration Reached")
@@ -286,18 +296,20 @@ class dqn_controller(Node):
             ns = np.array(self.history).flatten()
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             
-            reward = reward_calculation(detected_center, self.img_size, self.img_size)
-            self.episode_rewards.append(reward)
-            self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
-
+            pitch_reward, yaw_reward = reward_calculation(detected_center, self.img_size, self.img_size)
+            self.episode_rewards.append(pitch_reward + yaw_reward)
+            self.pitch_reward = torch.tensor([pitch_reward], dtype=torch.float32, device=self.dqn.device)
+            self.yaw_reward = torch.tensor([yaw_reward], dtype=torch.float32, device=self.dqn.device)
+            
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.action = self.dqn.select_eval_action(self.next_state)
+                self.pitch_action, self.yaw_action = self.dqn.select_eval_action(self.next_state)
             else:
                 if self.state is not None:
-                    self.dqn.memory.push(self.state, self.action, self.next_state, self.reward)
-                    self.erm.push(self.state, self.action, self.next_state, self.reward)
-                self.action = self.dqn.select_action(self.next_state)  
+                    self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
+                    self.erm.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
+                
+                self.pitch_action, self.yaw_action = self.dqn.select_action(self.next_state)  
                 self.state = self.next_state
                
                 #select adversary action
@@ -317,8 +329,9 @@ class dqn_controller(Node):
                     self.dqn.target_net.load_state_dict(target_net_state_dict)
             
             #publish action
-            action_idx = self.action.detach().cpu().numpy()[0][0]
-            self.command.data = int(action_idx)
+            pitch_action_idx = self.pitch_action.detach().cpu().numpy()[0][0]
+            yaw_action_idx = self.yaw_action.detach().cpu().numpy()[0][0]
+            self.command.data = [int(pitch_action_idx), int(yaw_action_idx)]
             self.command_publisher.publish(self.command)
             self.history = self.history[self.frame_skip:]
         
@@ -352,8 +365,8 @@ class dqn_controller(Node):
         self.writer.add_scalar('Duration', self.duration, self.episode)
 
         if self.state is not None and not self.evaluate and not self.complete:
-            self.dqn.memory.push(self.state, self.action, None, self.reward)
-            self.erm.push(self.state, self.action, None, self.reward)
+            self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, None, self.pitch_reward, self.yaw_reward)
+            self.erm.push(self.state, self.pitch_action, self.yaw_action, None, self.pitch_reward, self.yaw_reward)
 
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
@@ -424,10 +437,12 @@ class dqn_controller(Node):
         #reset state and history queues
         self.state = None
         self.next_state = None
-        self.reward = None
+        self.pitch_reward = None
+        self.yaw_reward = None
         self.history = []
-        self.action = None
-        
+        self.pitch_action = None
+        self.yaw_action = None
+
         # self.adv_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)
 
         #reset flush queues 

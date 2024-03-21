@@ -2,10 +2,10 @@ import numpy as np
 
 
 def reward_calculation(detected, w, h):
-    target = (w/2, h/2)
-    max_dist = np.sqrt(np.square(w)+np.square(h))/2
-    dist = np.sqrt(np.square(detected[0] - target[0]) + np.square(detected[1] - target[1]))/max_dist
-    return 1 - dist
+    target = (h/2, w/2)
+    max_dist = (h/2, w/2)
+    normalized_dist = (np.abs(detected[0]-target[0])/max_dist[0], np.abs(detected[1]-target[1])/max_dist[1])
+    return 1 - normalized_dist[0], 1 - normalized_dist[1]
     
 def action_mapping(idx, n):
     pitch = idx // n

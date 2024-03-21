@@ -4,8 +4,7 @@ from rclpy.node import Node
 from aqua_rl.control.PID import AnglePID
 from aqua2_interfaces.msg import AquaPose, Command
 from aqua_rl import hyperparams
-from std_msgs.msg import UInt8, Bool
-from aqua_rl.helpers import action_mapping
+from std_msgs.msg import UInt8MultiArray, Bool
 
 class autopilot(Node):
     def __init__(self):
@@ -15,7 +14,7 @@ class autopilot(Node):
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
         self.action_subscriber = self.create_subscription(
-            UInt8,
+            UInt8MultiArray,
             hyperparams.autopilot_command_,
             self.action_callback,
             self.queue_size)
@@ -70,8 +69,9 @@ class autopilot(Node):
         return
     
     def action_callback(self, a):
-        action = a.data
-        pitch_idx, yaw_idx = action_mapping(action, hyperparams.yaw_action_space_)
+        actions = np.array(a.data)
+        pitch_idx = actions[0]
+        yaw_idx = actions[1]
         pitch_offset = self.pitch_actions[int(pitch_idx)]
         yaw_offset = self.yaw_actions[int(yaw_idx)]
         self.pitch_pid.target += pitch_offset

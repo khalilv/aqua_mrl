@@ -122,8 +122,8 @@ def analyze_erm(erm_path):
     erm = ReplayMemory(10000)
     memory = torch.load(erm_path, map_location= torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     erm = memory['memory']
-    while True:
-        transition = erm.sample(1)
+    for i in range(erm.__len__()):
+        transition = erm.get(i)
         transition = Transition(*zip(*transition))
         state = torch.cat(transition.state).detach().cpu().numpy()
         try:
@@ -222,5 +222,5 @@ episode = 296
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
-analyze_erm('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/0/erm/episode_00050.pt')
+analyze_erm('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/0/erm/episode_00425.pt')
 

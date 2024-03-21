@@ -36,8 +36,8 @@ class detect(Node):
                             trace = True, 
                             verbose = False,
                             track=True,
-                            min_hits=3,
-                            max_age=10))
+                            min_hits=5,
+                            max_age=2))
         
         #online dataset collection
         self.dataset_path = 'src/aqua_rl/diver_dataset/'

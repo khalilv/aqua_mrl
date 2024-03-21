@@ -5,17 +5,17 @@ queue_size_ = 5
 img_size_ = 416
 
 #control hyperparams
-pitch_angle_limit_ = 7.5
-yaw_angle_limit_ = 25
+pitch_angle_limit_ = 5
+yaw_angle_limit_ = 15
 diver_max_speed_ = 0.25
 
 #dqn hyperparams
-history_size_ = 15
+history_size_ = 20
 yaw_action_space_ = 5
 pitch_action_space_ = 5
 
 #end of episode hyperparams
-empty_state_max_ = 10
+empty_state_max_ = 20
 depth_range_ = [-6, -12]
 train_duration_ = 2000
 
@@ -26,7 +26,7 @@ sharpness_ = 0.2
 load_erm_ = True
 experiment_number_ = 0
 train_for_ = 25
-frame_skip_ = 15
+frame_skip_ = 1
 
 #eval hyperparams
 eval_episode_ = -1
