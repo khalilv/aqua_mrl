@@ -59,7 +59,7 @@ class dqn_controller(Node):
         # self.adv_command_publisher = self.create_publisher(UnderwaterAdversaryCommand, 'adv_command', self.queue_size)
 
         #flush queues
-        self.flush_steps = self.queue_size + 30
+        self.flush_steps = self.queue_size + 35
         self.flush_imu = 0
         self.flush_diver = 0
         self.flush_detection = 0
@@ -306,7 +306,6 @@ class dqn_controller(Node):
                 self.pitch_action, self.yaw_action = self.dqn.select_eval_action(self.next_state)
             else:
                 if self.state is not None:
-                    print(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
                     self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
                     self.erm.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
                 
@@ -350,7 +349,7 @@ class dqn_controller(Node):
         print('stopping autopilot')
         self.autopilot_flag.data = False
         self.autopilot_start_stop_publisher.publish(self.autopilot_flag)
-        sleep(3.0)
+        sleep(3.5)
 
         if self.popen_called:
             return 
@@ -429,7 +428,7 @@ class dqn_controller(Node):
         starting_diver_pose.orientation.w = 0.5022942
         self.reset_diver_req.pose = starting_diver_pose
         self.reset_diver_client.call_async(self.reset_diver_req)
-        sleep(3.0)
+        sleep(3.5)
 
         #reset trajectory
         self.aqua_trajectory = []

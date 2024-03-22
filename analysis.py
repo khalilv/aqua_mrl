@@ -130,10 +130,12 @@ def analyze_erm(erm_path):
             next_state = torch.cat(transition.next_state).detach().cpu().numpy()
         except:
             continue
-        action = torch.cat(transition.action).detach().cpu().numpy()
-        reward = torch.cat(transition.reward).detach().cpu().numpy()
-        sx,sy = state[0][0:int(history_size*2):2], state[0][1:int(history_size*2)+1:2]
-        nsx, nsy = next_state[0][0:int(history_size*2):2], next_state[0][1:int(history_size*2)+1:2]
+        pitch_action = torch.cat(transition.pitch_action).detach().cpu().numpy()[0][0]
+        yaw_action = torch.cat(transition.yaw_action).detach().cpu().numpy()[0][0]
+        pitch_reward = torch.cat(transition.pitch_reward).detach().cpu().numpy()        
+        yaw_reward = torch.cat(transition.yaw_reward).detach().cpu().numpy()
+        sy,sx = state[0][0:int(history_size*2):2], state[0][1:int(history_size*2)+1:2]
+        nsy, nsx = next_state[0][0:int(history_size*2):2], next_state[0][1:int(history_size*2)+1:2]
         plt.figure(figsize=(30,30))
         plt.xlim([0, hyperparams.img_size_])
         plt.ylim([0, hyperparams.img_size_])
@@ -145,10 +147,8 @@ def analyze_erm(erm_path):
         plt.plot(nsx[-1], nsy[-1], c='b', marker='o', markersize=5)
         plt.legend()
         title = "Action: "
-        action_idx = action[0][0]
-        pitch_idx, yaw_idx = action_mapping(action_idx, hyperparams.yaw_action_space_)
-        pitch = pitch_actions[pitch_idx]
-        yaw = yaw_actions[yaw_idx]
+        pitch = pitch_actions[int(pitch_action)]
+        yaw = yaw_actions[int(yaw_action)]
         if pitch < 0:
             title += "(pitch {} up, ".format(np.abs(pitch))
         elif pitch > 0:
@@ -163,7 +163,7 @@ def analyze_erm(erm_path):
         elif yaw == 0.0:
             title += "no yaw) "
 
-        title += 'Reward: {}'.format(reward)
+        title += 'pitch reward: {}, yaw reward: {}'.format(pitch_reward, yaw_reward)
         plt.suptitle(title)
         plt.show()
 
@@ -222,5 +222,5 @@ episode = 296
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
-analyze_erm('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/0/erm/episode_00425.pt')
+analyze_erm('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/0/erm/episode_00505.pt')
 

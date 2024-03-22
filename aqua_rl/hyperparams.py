@@ -25,7 +25,7 @@ sharpness_ = 0.2
 #training hyperparams
 load_erm_ = True
 experiment_number_ = 0
-train_for_ = 25
+train_for_ = 40
 frame_skip_ = 10
 
 #eval hyperparams

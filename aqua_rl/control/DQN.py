@@ -65,14 +65,14 @@ class DQNNetwork(nn.Module):
 class DQN:
 
     def __init__(self, n_pitch_actions, n_yaw_actions, history_size) -> None:
-        self.BATCH_SIZE = 32
+        self.BATCH_SIZE = 64
         self.GAMMA = 0.99
         self.EPS_START = 0.8
         self.EPS_END = 0.1
-        self.EPS_DECAY = 50000
-        self.TAU = 0.002
+        self.EPS_DECAY = 25000
+        self.TAU = 0.005
         LR = 1e-4
-        self.MEMORY_SIZE = 50000
+        self.MEMORY_SIZE = 25000
         self.n_pitch_actions = n_pitch_actions
         self.n_yaw_actions = n_yaw_actions
         self.history_size = history_size
@@ -94,6 +94,7 @@ class DQN:
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
                 pitch, yaw = self.policy_net(s)
+                print(pitch, yaw)
                 return pitch.max(1)[1].view(1, 1), yaw.max(1)[1].view(1, 1)
         else:
             return torch.tensor([[int(np.random.randint(0,self.n_pitch_actions))]], device=self.device, dtype=torch.long), torch.tensor([[int(np.random.randint(0,self.n_yaw_actions))]], device=self.device, dtype=torch.long)
@@ -153,8 +154,6 @@ class DQN:
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
         pitch_loss = criterion(state_action_values_pitch, expected_state_action_values_pitch.unsqueeze(1)) 
-
-        criterion = nn.SmoothL1Loss()
         yaw_loss = criterion(state_action_values_yaw, expected_state_action_values_yaw.unsqueeze(1)) 
 
         loss = pitch_loss + yaw_loss
