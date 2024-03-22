@@ -6,6 +6,7 @@ import random
 import math 
 import numpy as np 
 from collections import namedtuple, deque
+import torch.nn.init as init
 
 Transition = namedtuple('Transition',
                         ('state', 'pitch_action', 'yaw_action', 'next_state', 'pitch_reward', 'yaw_reward'))
@@ -35,23 +36,28 @@ class DQNNetwork(nn.Module):
         super(DQNNetwork, self).__init__()
         
         self.fc = nn.Sequential(
-            nn.Linear(in_features= history * 2, out_features= 512),
+            nn.Linear(in_features= history * 2, out_features= 256),
             nn.ReLU(),
-            nn.Linear(in_features= 512, out_features= 256),
-            nn.ReLU(),           
+            nn.Linear(in_features= 256, out_features= 128),
+            nn.ReLU(),  
         )
 
         self.yaw_fc = nn.Sequential(
-            nn.Linear(in_features= 256, out_features= 128),
-            nn.ReLU(),
             nn.Linear(in_features= 128, out_features= n_yaw_actions)
         )
 
         self.pitch_fc = nn.Sequential(
-            nn.Linear(in_features= 256, out_features= 128),
-            nn.ReLU(),
             nn.Linear(in_features= 128, out_features= n_pitch_actions)
         )
+
+        # Apply He initialization to linear layers
+        self.apply(self.init_weights)
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
+            if m.bias is not None:
+                init.zeros_(m.bias, 0)
 
 
     # Called with either one element to determine next action, or a batch
@@ -66,11 +72,11 @@ class DQN:
 
     def __init__(self, n_pitch_actions, n_yaw_actions, history_size) -> None:
         self.BATCH_SIZE = 64
-        self.GAMMA = 0.99
-        self.EPS_START = 0.8
+        self.GAMMA = 0.9
+        self.EPS_START = 0.9
         self.EPS_END = 0.1
         self.EPS_DECAY = 25000
-        self.TAU = 0.005
+        self.TAU = 0.0025
         LR = 1e-4
         self.MEMORY_SIZE = 25000
         self.n_pitch_actions = n_pitch_actions
@@ -94,7 +100,6 @@ class DQN:
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
                 pitch, yaw = self.policy_net(s)
-                print(pitch, yaw)
                 return pitch.max(1)[1].view(1, 1), yaw.max(1)[1].view(1, 1)
         else:
             return torch.tensor([[int(np.random.randint(0,self.n_pitch_actions))]], device=self.device, dtype=torch.long), torch.tensor([[int(np.random.randint(0,self.n_yaw_actions))]], device=self.device, dtype=torch.long)
@@ -103,7 +108,7 @@ class DQN:
         with torch.no_grad():
             pitch, yaw = self.target_net(s)
             return pitch.max(1)[1].view(1, 1), yaw.max(1)[1].view(1, 1)
-
+   
     def optimize(self):
         if len(self.memory) < self.BATCH_SIZE:
             return None
@@ -125,8 +130,8 @@ class DQN:
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
         pitch, yaw  = self.policy_net(state_batch)
-        state_action_values_pitch = pitch.gather(1, pitch_action_batch)
-        state_action_values_yaw = yaw.gather(1, yaw_action_batch)
+        td_estimate_pitch = pitch.gather(1, pitch_action_batch)
+        td_estimate_yaw = yaw.gather(1, yaw_action_batch)
 
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based
@@ -136,25 +141,28 @@ class DQN:
         next_state_values_pitch = torch.zeros(self.BATCH_SIZE, device=self.device)
         next_state_values_yaw = torch.zeros(self.BATCH_SIZE, device=self.device)
         with torch.no_grad():
-            #DQN
-            ns_pitch, ns_yaw = self.target_net(non_final_next_states)
-            next_state_values_pitch[non_final_mask] = ns_pitch.max(1)[0]
-            next_state_values_yaw[non_final_mask] = ns_yaw.max(1)[0]
+            # #DQN
+            # ns_pitch, ns_yaw = self.target_net(non_final_next_states)
+            # next_state_values_pitch[non_final_mask] = ns_pitch.max(1)[0]
+            # next_state_values_yaw[non_final_mask] = ns_yaw.max(1)[0]
 
             #DDQN
-            # qt = self.target_net(non_final_next_states)
-            # qp = self.policy_net(non_final_next_states)
-            # next_state_values_pitch[non_final_mask] = qt[0].gather(1, qp[0].argmax(1).reshape(1,-1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
-            # next_state_values_yaw[non_final_mask] = qt[1].gather(1, qp[1].argmax(1).reshape(1,-1)) #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+            ns_target_pitch, ns_target_yaw = self.target_net(non_final_next_states)
+            ns_policy_pitch, ns_policy_yaw = self.policy_net(non_final_next_states)
+            best_action_pitch = torch.argmax(ns_policy_pitch, axis=1).unsqueeze(0).t()
+            best_action_yaw = torch.argmax(ns_policy_yaw, axis=1).unsqueeze(0).t()
 
+            next_state_values_pitch[non_final_mask] = ns_target_pitch.gather(1, best_action_pitch).squeeze() #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+            next_state_values_yaw[non_final_mask] = ns_target_yaw.gather(1, best_action_yaw).squeeze() #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+           
         # Compute the expected Q values
-        expected_state_action_values_pitch = (next_state_values_pitch * self.GAMMA) + pitch_reward_batch  #R + gamma * target
-        expected_state_action_values_yaw = (next_state_values_yaw * self.GAMMA) + yaw_reward_batch  #R + gamma * target
+        td_target_pitch = (next_state_values_pitch * self.GAMMA) + pitch_reward_batch  #R + gamma * target
+        td_target_yaw = (next_state_values_yaw * self.GAMMA) + yaw_reward_batch  #R + gamma * target
 
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
-        pitch_loss = criterion(state_action_values_pitch, expected_state_action_values_pitch.unsqueeze(1)) 
-        yaw_loss = criterion(state_action_values_yaw, expected_state_action_values_yaw.unsqueeze(1)) 
+        pitch_loss = criterion(td_estimate_pitch, td_target_pitch.unsqueeze(1)) 
+        yaw_loss = criterion(td_estimate_yaw, td_target_yaw.unsqueeze(1)) 
 
         loss = pitch_loss + yaw_loss
         
