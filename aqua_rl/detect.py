@@ -42,7 +42,7 @@ class detect(Node):
         #online dataset collection
         self.dataset_path = 'src/aqua_rl/diver_dataset/'
         self.dataset_size = len(os.listdir(self.dataset_path))
-        self.save_probability = 0.0
+        self.save_probability = 0.005
 
         #measuring publish frequency
         self.t0 = 0
@@ -57,12 +57,13 @@ class detect(Node):
 
         img = np.fromstring(msg.data.tobytes(), np.uint8)
         img = cv2.imdecode(img, cv2.IMREAD_COLOR)
-        outputs, image_with_detections = self.model.detect(img)
 
         #save image with probability
         if np.random.rand() < self.save_probability:
             cv2.imwrite(self.dataset_path + str(self.dataset_size) + '.jpg', img)
             self.dataset_size += 1
+
+        outputs, image_with_detections = self.model.detect(img)
         
         cv2.imshow("yolov7", image_with_detections)
         cv2.waitKey(1)

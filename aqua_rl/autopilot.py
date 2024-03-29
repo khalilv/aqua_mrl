@@ -29,7 +29,7 @@ class autopilot(Node):
         self.measured_yaw_angle = None
 
         self.speed = hyperparams.speed_
-        self.roll_gains = hyperparams.roll_gains_
+        self.roll_gains = hyperparams.autopilot_roll_gains_
         self.pitch_gains = hyperparams.autopilot_pitch_gains_
         self.yaw_gains = hyperparams.autopilot_yaw_gains_
         
@@ -74,8 +74,8 @@ class autopilot(Node):
         yaw_idx = actions[1]
         pitch_offset = self.pitch_actions[int(pitch_idx)]
         yaw_offset = self.yaw_actions[int(yaw_idx)]
-        self.pitch_pid.target += pitch_offset
-        self.yaw_pid.target += yaw_offset
+        self.pitch_pid.target = self.measured_pitch_angle + pitch_offset
+        self.yaw_pid.target = self.measured_yaw_angle + yaw_offset
         return
 
     def start_stop_callback(self, flag):

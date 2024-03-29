@@ -1,14 +1,13 @@
 import numpy as np
 
 
-def reward_calculation(detected, w, h):
-    if detected[0] == -1 and detected[1] == -1:
+def reward_calculation(yn, xn, sharpness):
+    if np.abs(yn) >= 1 and np.abs(xn) >= 1:
         return -1, -1
     else:
-        target = (h/2, w/2)
-        max_dist = (h/2, w/2)
-        normalized_dist = (np.abs(detected[0]-target[0])/max_dist[0], np.abs(detected[1]-target[1])/max_dist[1])
-        return 1 - normalized_dist[0], 1 - normalized_dist[1]
+        pitch_reward = sharpness/(np.abs(yn) + sharpness)
+        yaw_reward = sharpness/(np.abs(xn) + sharpness)
+        return pitch_reward, yaw_reward
     
 def action_mapping(idx, n):
     pitch = idx // n
@@ -17,6 +16,32 @@ def action_mapping(idx, n):
 
 def inverse_mapping(pitch_idx, yaw_idx, n):
     return int(pitch_idx * n + yaw_idx)
+
+def safe_region(steps, s, f):
+    if steps < s:
+        return 0.0
+    elif steps >= s and steps < f:
+        return (steps - s)/(f-s)
+    else:
+        return 1.0
+
+def map_missing_detection(yn, xn):
+    if yn < 0:
+        if xn < 0:
+            return [-1,-1]
+        else:
+            return [-1,1]
+    else:
+        if xn < 0:
+            return [1,-1]
+        else:
+            return [1,1]
+
+def normalize_coords(y,x,w,h):
+    xn = (2 * x / w) - 1
+    yn = (2 * y / h) - 1
+    return [yn,xn]
+
     
 def euler_from_quaternion(quaternion):
     """

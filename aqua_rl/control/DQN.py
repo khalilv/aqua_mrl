@@ -57,7 +57,7 @@ class DQNNetwork(nn.Module):
         if isinstance(m, nn.Linear):
             init.kaiming_uniform_(m.weight, mode='fan_in', nonlinearity='relu')
             if m.bias is not None:
-                init.zeros_(m.bias, 0)
+                init.zeros_(m.bias)
 
 
     # Called with either one element to determine next action, or a batch
@@ -75,10 +75,10 @@ class DQN:
         self.GAMMA = 0.9
         self.EPS_START = 0.9
         self.EPS_END = 0.1
-        self.EPS_DECAY = 25000
+        self.EPS_DECAY = 250000
         self.TAU = 0.0025
         LR = 1e-4
-        self.MEMORY_SIZE = 25000
+        self.MEMORY_SIZE = 50000
         self.n_pitch_actions = n_pitch_actions
         self.n_yaw_actions = n_yaw_actions
         self.history_size = history_size
