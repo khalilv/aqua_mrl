@@ -28,19 +28,19 @@ def safe_region(steps, s, f):
 def map_missing_detection(yn, xn):
     if yn < 0:
         if xn < 0:
-            return [-1,-1]
+            return -1, -1
         else:
-            return [-1,1]
+            return -1, 1
     else:
         if xn < 0:
-            return [1,-1]
+            return 1, -1
         else:
-            return [1,1]
+            return 1, 1
 
 def normalize_coords(y,x,w,h):
     xn = (2 * x / w) - 1
     yn = (2 * y / h) - 1
-    return [yn,xn]
+    return yn, xn
 
     
 def euler_from_quaternion(quaternion):

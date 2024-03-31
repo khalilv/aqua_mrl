@@ -36,8 +36,10 @@ class DQNNetwork(nn.Module):
         super(DQNNetwork, self).__init__()
         
         self.fc = nn.Sequential(
-            nn.Linear(in_features= history * 2, out_features= 256),
+            nn.Linear(in_features= history * 2, out_features= 512),
             nn.ReLU(),
+            nn.Linear(in_features= 512, out_features= 256),
+            nn.ReLU(),  
             nn.Linear(in_features= 256, out_features= 128),
             nn.ReLU(),  
         )

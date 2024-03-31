@@ -197,7 +197,7 @@ class dqn_controller(Node):
         if self.diver_pose:
 
             #scale vector to current magnitude
-            self.diver_cmd.vx = np.random.uniform(hyperparams.speed_+0.025, hyperparams.speed_+0.15)
+            self.diver_cmd.vx = np.random.uniform(hyperparams.speed_, hyperparams.speed_+0.05)
             self.diver_cmd.vy = np.random.uniform(-1,1)
             self.diver_cmd.vz = np.random.uniform(-1,1)
 
@@ -257,13 +257,17 @@ class dqn_controller(Node):
         #check for null input from detection module
         if coords[0] == -1 and coords[1] == -1 and coords[2] == -1 and coords[3] == -1:
             self.empty_state_counter += 1
-            detected_center = map_missing_detection(self.history[-1][0],self.history[-1][1])
+            last_location = self.history[-1]
+            yc, xc = map_missing_detection(last_location[0],last_location[1])
+            dqn_state = [yc, xc]
         else:
             self.empty_state_counter = 0
             yc = (coords[1] + coords[3])/2
             xc = (coords[0] + coords[2])/2
-            detected_center = normalize_coords(yc, xc, self.img_size, self.img_size)
-        
+            yc, xc = normalize_coords(yc, xc, self.img_size, self.img_size)
+            # area = np.abs(coords[1] - coords[3]) * np.abs(coords[0] - coords[2])
+            dqn_state = [yc, xc]   
+   
         if self.empty_state_counter > self.empty_state_max:
             print("Lost target. Resetting")
             self.finished = True
@@ -277,12 +281,12 @@ class dqn_controller(Node):
             return
         self.duration += 1
         
-        self.history.append(detected_center)
+        self.history.append(dqn_state)
         if len(self.history) == self.history_size:
             ns = np.array(self.history).flatten()
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             
-            pitch_reward, yaw_reward = reward_calculation(detected_center[0], detected_center[1], self.reward_sharpness)
+            pitch_reward, yaw_reward = reward_calculation(dqn_state[0], dqn_state[1], self.reward_sharpness)
             self.episode_rewards.append([pitch_reward, yaw_reward])
             self.pitch_reward = torch.tensor([pitch_reward], dtype=torch.float32, device=self.dqn.device)
             self.yaw_reward = torch.tensor([yaw_reward], dtype=torch.float32, device=self.dqn.device)
@@ -296,11 +300,11 @@ class dqn_controller(Node):
                     self.erm.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.pitch_reward, self.yaw_reward)
                 
                 self.pitch_action, self.yaw_action = self.dqn.select_action(self.next_state)  
-                if np.abs(detected_center[0]) >= safe_region(self.dqn.steps_done, self.pid_decay_start, self.pid_decay_end):
-                    pa = self.discretize(self.pitch_pid.control(detected_center[0]), self.pitch_actions)
+                if np.abs(dqn_state[0]) >= safe_region(self.dqn.steps_done, self.pid_decay_start, self.pid_decay_end):
+                    pa = self.discretize(self.pitch_pid.control(dqn_state[0]), self.pitch_actions)
                     self.pitch_action = torch.tensor([[int(pa)]], device=self.dqn.device)
-                if np.abs(detected_center[1]) >= safe_region(self.dqn.steps_done, self.pid_decay_start, self.pid_decay_end):
-                    ya = self.discretize(self.yaw_pid.control(detected_center[1]), self.yaw_actions)
+                if np.abs(dqn_state[1]) >= safe_region(self.dqn.steps_done, self.pid_decay_start, self.pid_decay_end):
+                    ya = self.discretize(self.yaw_pid.control(dqn_state[1]), self.yaw_actions)
                     self.yaw_action = torch.tensor([[int(ya)]], device=self.dqn.device) 
                 
                 self.state = self.next_state
