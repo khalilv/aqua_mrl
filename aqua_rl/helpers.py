@@ -1,13 +1,14 @@
 import numpy as np
 
 
-def reward_calculation(yn, xn, sharpness):
-    if np.abs(yn) >= 1 and np.abs(xn) >= 1:
-        return -1, -1
-    else:
+def reward_calculation(yn, xn, detected, sharpness):
+    if detected == 1.0:
         pitch_reward = sharpness/(np.abs(yn) + sharpness)
         yaw_reward = sharpness/(np.abs(xn) + sharpness)
-        return pitch_reward, yaw_reward
+    else:
+        pitch_reward = -0.5
+        yaw_reward = -0.5
+    return pitch_reward, yaw_reward
     
 def action_mapping(idx, n):
     pitch = idx // n

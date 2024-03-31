@@ -57,3 +57,7 @@ ros2 service call /a13/system/calibrate std_srvs/srv/Empty (in TERMINAL 4)
 ros2 service call /a13/system/set_mode aqua2_interfaces/srv/SetString "value: 'swimmode'" (in TERMINAL 4) 
 ros2 run aqua_rl dqn_controller (in TERMINAL 4) 
 
+Not registered to publish topic 'compass/heading'! Valid publish topics are: dict_keys([]) 
+UnityEngine.Debug:LogError (object)
+Unity.Robotics.ROSTCPConnector.ROSConnection:ReceiveSysCommand (string,string) (at /usr/local/data/kvirji/AQUA/AquaSim/Library/PackageCache/com.unity.robotics.ros-tcp-connector@c27f00c6cf/Runtime/TcpConnector/ROSConnection.cs:680)
+Unity.Robotics.ROSTCPConnector.ROSConnection:Update () (at /usr/local/data/kvirji/AQUA/AquaSim/Library/PackageCache/com.unity.robotics.ros-tcp-connector@c27f00c6cf/Runtime/TcpConnector/ROSConnection.cs:587)

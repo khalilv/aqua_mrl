@@ -4,12 +4,25 @@ from rclpy.node import Node
 from aqua_rl.control.PID import AnglePID
 from aqua2_interfaces.msg import AquaPose, Command
 from aqua_rl import hyperparams
-from std_msgs.msg import UInt8MultiArray, Bool
+from std_msgs.msg import UInt8MultiArray
+from std_srvs.srv import SetBool
+from ir_aquasim_interfaces.srv import SetPosition
+from geometry_msgs.msg import Pose
+from time import sleep
 
 class autopilot(Node):
     def __init__(self):
         super().__init__('autopilot')
         self.queue_size = hyperparams.queue_size_
+        self.use_autopilot = hyperparams.use_autopilot_
+        self.speed = hyperparams.speed_
+        self.roll_gains = hyperparams.autopilot_roll_gains_
+        self.pitch_gains = hyperparams.autopilot_pitch_gains_
+        self.yaw_gains = hyperparams.autopilot_yaw_gains_
+        self.pitch_limit = hyperparams.pitch_limit_
+        self.yaw_limit = hyperparams.yaw_limit_
+        self.pitch_action_space = hyperparams.pitch_action_space_
+        self.yaw_action_space = hyperparams.yaw_action_space_
 
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -18,23 +31,18 @@ class autopilot(Node):
             hyperparams.autopilot_command_,
             self.action_callback,
             self.queue_size)
-        self.start_stop_subscriber = self.create_subscription(
-            Bool,
+        self.start_stop_service = self.create_service(
+            SetBool,
             hyperparams.autopilot_start_stop_,
-            self.start_stop_callback,
-            self.queue_size)
-        
+            self.start_stop_callback)
+        self.reset_client = self.create_client(SetPosition, hyperparams.aqua_reset_srv_name_)
+
         self.measured_roll_angle = None
         self.measured_pitch_angle = None
         self.measured_yaw_angle = None
-
-        self.speed = hyperparams.speed_
-        self.roll_gains = hyperparams.autopilot_roll_gains_
-        self.pitch_gains = hyperparams.autopilot_pitch_gains_
-        self.yaw_gains = hyperparams.autopilot_yaw_gains_
         
-        self.pitch_actions = np.linspace(-hyperparams.pitch_angle_limit_, hyperparams.pitch_angle_limit_, hyperparams.pitch_action_space_)
-        self.yaw_actions = np.linspace(-hyperparams.yaw_angle_limit_, hyperparams.yaw_angle_limit_, hyperparams.yaw_action_space_)
+        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
+        self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
 
         self.roll_target = 0.0
         self.pitch_target = 0.0
@@ -52,6 +60,20 @@ class autopilot(Node):
         self.command.speed = self.speed
 
         self.publish_actions = False
+
+        self.pitch_action_to_execute = None
+        self.yaw_action_to_execute = None
+
+        self.reset_req = SetPosition.Request()
+        #aqua starting position and orientation 
+        self.starting_pose = Pose()
+        self.starting_pose.position.x = 70.0
+        self.starting_pose.position.z = -0.3                               
+        self.starting_pose.position.y = -10.0
+        self.starting_pose.orientation.x = 0.0
+        self.starting_pose.orientation.y = -0.7071068
+        self.starting_pose.orientation.z = 0.0
+        self.starting_pose.orientation.w = 0.7071068
         
         print('Initialized: autopilot')
 
@@ -61,39 +83,56 @@ class autopilot(Node):
         self.measured_yaw_angle = self.calculate_yaw(imu)
         
         if self.publish_actions:
-            self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-            self.command.yaw = self.yaw_pid.control(self.measured_yaw_angle)
+            self.command.speed = self.speed
+            if self.use_autopilot:
+                self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
+                self.command.yaw = self.yaw_pid.control(self.measured_yaw_angle)
+            else:
+                self.command.pitch = self.pitch_action_to_execute
+                self.command.yaw = self.yaw_action_to_execute
             self.command_publisher.publish(self.command)
         
         return
     
     def action_callback(self, a):
         actions = np.array(a.data)
-        pitch_idx = actions[0]
-        yaw_idx = actions[1]
-        pitch_offset = self.pitch_actions[int(pitch_idx)]
-        yaw_offset = self.yaw_actions[int(yaw_idx)]
-        self.pitch_pid.target = self.measured_pitch_angle + pitch_offset
-        self.yaw_pid.target = self.measured_yaw_angle + yaw_offset
+        pitch_action = self.pitch_actions[int(actions[0])]
+        yaw_action = self.yaw_actions[int(actions[1])]
+        if self.use_autopilot:
+            self.pitch_pid.target = self.measured_pitch_angle + pitch_action
+            self.yaw_pid.target = self.measured_yaw_angle + yaw_action
+        else:
+            self.pitch_action_to_execute = pitch_action
+            self.yaw_action_to_execute = yaw_action
         return
 
-    def start_stop_callback(self, flag):
-        if flag.data:
+    def start_stop_callback(self, request, response):
+        if request.data:
             self.publish_actions = True
-            self.pitch_pid.target = 0.0
-            self.yaw_pid.target = 90.0
+            if self.use_autopilot:
+                self.pitch_pid.target = 0.0
+                self.yaw_pid.target = 90.0
+            else:
+                self.pitch_action_to_execute = 0.0
+                self.yaw_action_to_execute = 0.0
+            response.message = 'Autopilot started'
         else:
             self.publish_actions = False
-            for _ in range(10):
+            for _ in range(self.queue_size):
                 self.command.pitch = 0.0
                 self.command.yaw = 0.0
                 self.command.roll = 0.0
                 self.command.heave = 0.0
                 self.command.speed = self.speed
                 self.command_publisher.publish(self.command)
-        return
-    
+            sleep(2.5)
+            self.reset_req.pose = self.starting_pose
+            self.reset_client.call_async(self.reset_req)
+            response.message = 'Autopilot stopped and reset'
+        response.success = True
+        return response
+        
     def calculate_roll(self, imu):
         return imu.roll
     

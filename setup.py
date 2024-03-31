@@ -24,21 +24,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'underwater_adversary_command_publisher = aqua_rl.underwater_adversary_command_publisher:main',
             'pid_controller = aqua_rl.pid_controller:main',
-            'manual_controller = aqua_rl.manual_controller:main',
-            'segmentation = aqua_rl.segmentation:main',
-            'pid_parameters = aqua_rl.pid_parameters:main',
-            'pid_tuning = aqua_rl.pid_tuning:main',
             'dqn_controller = aqua_rl.dqn_controller:main',
-            'dqn_controller_eval = aqua_rl.dqn_controller_eval:main',
-            'dqn_controller_adv = aqua_rl.dqn_controller_adv:main',
-            'dqn_barbados = aqua_rl.dqn_barbados:main',
-            'teleop_controller = aqua_rl.teleop_controller:main',
             'detect = aqua_rl.detect:main',
             'diver_controller = aqua_rl.diver_controller:main',
             'autopilot = aqua_rl.autopilot:main',
-
         ],
     },
 )
