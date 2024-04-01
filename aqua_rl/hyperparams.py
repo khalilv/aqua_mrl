@@ -29,9 +29,9 @@ pitch_action_space_ = 5
 frame_skip_ = 1
 
 #end of episode hyperparams
-empty_state_max_ = 20
+empty_state_max_ = 10
 depth_range_ = [-6, -12]
-train_duration_ = 2000
+train_duration_ = 1000
 
 #reward hyperparams
 sharpness_ = 0.1
@@ -46,7 +46,7 @@ pid_decay_end_ = 250000
 #eval hyperparams
 eval_episode_ = -1
 eval_for_ = 10
-eval_duration_ = 2000
+eval_duration_ = 1000
 
 using_hardware_topics_ = False
 
