@@ -36,12 +36,16 @@ train_duration_ = 1000
 #reward hyperparams
 sharpness_ = 0.1
 
+#adversary hyperparams
+adv_action_space_ = 7
+adv_magnitude_ = 0.25
+
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 0
+experiment_number_ = 2
 train_for_ = 10
-pid_decay_start_ = 25000
-pid_decay_end_ = 250000
+pid_decay_start_ = 0
+pid_decay_end_ = 0
 
 #eval hyperparams
 eval_episode_ = -1
@@ -71,4 +75,7 @@ else:
     diver_reset_srv_name_ = '/diver/set_position'
     detection_topic_name_ = '/diver/coordinates'
     aqua_reset_srv_name_ = '/simulator/set_position'
+    adv_unity_topic_name_ = '/adv/current'
+    adv_command_topic_name_ = '/adv/command'
+    adv_start_stop_ = '/adv/start_stop'
     speed_ = 0.25

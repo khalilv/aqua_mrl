@@ -43,6 +43,18 @@ def normalize_coords(y,x,w,h):
     yn = (2 * y / h) - 1
     return yn, xn
 
+def adv_action_mapping(idx):
+    action_mapping = {
+        0: (0, 0, 0),
+        1: (0, 0, 1),
+        2: (0, 1, 0),
+        3: (0, 1, 1),
+        4: (1, 0, 0),
+        5: (1, 0, 1),
+        6: (1, 1, 0),
+        7: (1, 1, 1)
+    }
+    return action_mapping[idx]
     
 def euler_from_quaternion(quaternion):
     """
