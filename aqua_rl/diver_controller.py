@@ -58,9 +58,9 @@ class diver_controller(Node):
         if self.diver_pose is not None and self.move_diver:
 
             #scale vector to current magnitude
-            self.diver_cmd.vx = np.random.uniform(hyperparams.speed_+0.05, hyperparams.speed_+0.15)
-            self.diver_cmd.vy = np.random.uniform(-1,1)
-            self.diver_cmd.vz = np.random.uniform(-1,1)
+            self.diver_cmd.vx = np.random.uniform(hyperparams.speed_+0.15, hyperparams.speed_+0.25)
+            self.diver_cmd.vy = np.random.uniform(-0.5,0.5)
+            self.diver_cmd.vz = np.random.uniform(-0.5,0.5)
 
             speed = np.sqrt(np.square(self.diver_cmd.vy) + np.square(self.diver_cmd.vz))
             if speed > self.max_speed:

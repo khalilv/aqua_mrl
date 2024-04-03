@@ -31,7 +31,7 @@ class detect(Node):
         self.model = YoloV7(Namespace(half=False,
                             confidence_threshold=0.7, 
                             iou_threshold = 0.1,
-                            weights = 'src/aqua_rl/aqua_rl/YOLOv7/weights/diver.pt',
+                            weights = 'src/aqua_rl/aqua_rl/YOLOv7/weights/diver_v2.pt',
                             image_size = self.img_size, 
                             trace = True, 
                             verbose = False,
