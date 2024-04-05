@@ -37,8 +37,8 @@ train_duration_ = 1000
 sharpness_ = 0.1
 
 #adversary hyperparams
-adv_action_space_ = 7
-adv_magnitude_ = 0.25
+adv_action_space_ = 3
+adv_limit_ = 0.25
 
 #training hyperparams
 load_erm_ = True

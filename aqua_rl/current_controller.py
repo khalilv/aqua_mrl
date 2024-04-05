@@ -1,10 +1,10 @@
 import rclpy
+import numpy as np
 from rclpy.node import Node
 from aqua2_interfaces.msg import UnderwaterAdversaryCommand
 from aqua_rl import hyperparams
-from aqua_rl.helpers import adv_action_mapping
 from std_srvs.srv import SetBool
-from std_msgs.msg import UInt8
+from std_msgs.msg import Float32MultiArray
 
 class current_controller(Node):
 
@@ -13,7 +13,6 @@ class current_controller(Node):
 
         #hyperparams
         self.queue_size = hyperparams.queue_size_
-        self.adv_madnitude = hyperparams.adv_magnitude_
 
         #command publisher
         self.publisher = self.create_publisher(UnderwaterAdversaryCommand, hyperparams.adv_unity_topic_name_, self.queue_size)
@@ -22,7 +21,7 @@ class current_controller(Node):
             hyperparams.adv_start_stop_,
             self.start_stop_callback)
         self.action_subscriber = self.create_subscription(
-            UInt8,
+            Float32MultiArray,
             hyperparams.adv_command_topic_name_,
             self.action_callback,
             self.queue_size)
@@ -37,15 +36,12 @@ class current_controller(Node):
 
     def action_callback(self, action):
         if self.publish_flag:
-            action_idx = int(action.data)
-            x,y,z = adv_action_mapping(action_idx)
-            #scale vector to current magnitude
-            self.cmd.current_x = self.adv_madnitude * x
-            self.cmd.current_z = self.adv_madnitude * z
-            self.cmd.current_y = self.adv_madnitude * y 
+            action = np.array(action.data)
+            self.cmd.current_x =  float(action[0])
+            self.cmd.current_z =  float(action[1])
+            self.cmd.current_y =  float(action[2])
             #publish
             self.publisher.publish(self.cmd)
-            print('Publishing adversary command')
         return 
     
     def start_stop_callback(self, request, response):
