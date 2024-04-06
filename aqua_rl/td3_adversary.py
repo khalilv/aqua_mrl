@@ -34,6 +34,7 @@ class td3_adversary(Node):
         self.empty_state_max = hyperparams.empty_state_max_
         self.adversary_limit = hyperparams.adv_limit_
         self.adversary_action_space = hyperparams.adv_action_space_
+        self.switch_every = hyperparams.switch_every_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(UInt8MultiArray, hyperparams.autopilot_command_, self.queue_size)
@@ -90,23 +91,23 @@ class td3_adversary(Node):
         self.dqn.target_net.load_state_dict(dqn_checkpoint['model_state_dict_target'], strict=True)
         self.dqn.optimizer.load_state_dict(dqn_checkpoint['optimizer_state_dict'])
         self.dqn.steps_done = dqn_checkpoint['training_steps']
-        
+        print('DQN loaded. Steps completed: ', self.dqn.steps_done)
+
         if self.load_erm:
             print('Loading ERM from previous experience. Note this may take time')
             t0 = time()
             for file_path in sorted(os.listdir(self.save_memory_path), reverse=True):
                 if os.path.isfile(os.path.join(self.save_memory_path, file_path)):
-                    if self.td3.memory.size < self.td3.memory_capacity:
-                        with open(os.path.join(self.save_memory_path, file_path), 'rb') as f:
-                            states = np.load(f)
-                            actions = np.load(f)
-                            next_states = np.load(f)
-                            rewards = np.load(f)
-                            not_dones = np.load(f)
-                            self.td3.memory.add_batch(states,actions,next_states,rewards,not_dones, len(states))
+                    with open(os.path.join(self.save_memory_path, file_path), 'rb') as f:
+                        states = np.load(f)
+                        actions = np.load(f)
+                        next_states = np.load(f)
+                        rewards = np.load(f)
+                        not_dones = np.load(f)
+                        if self.td3.memory.size + len(states) < self.td3.memory_capacity:
+                            self.td3.memory.add_batch(states,actions,next_states,rewards,not_dones,len(states))
             t1 = time()
             print('ERM size: ', self.td3.memory.size, '. Time taken to load: ', t1 - t0)
-            print(self.td3.memory.sample(5))
         else:
             print('WARNING: weights loaded but starting from a fresh replay memory')
         
@@ -266,7 +267,7 @@ class td3_adversary(Node):
                 'total_it': self.td3.total_it
             }, self.save_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)))
             
-            with open(self.save_memory_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)), 'wb') as f:
+            with open(self.save_memory_path +  '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
                 np.save(f, self.adversary_erm.state[:self.adversary_erm.ptr,:])
                 np.save(f, self.adversary_erm.action[:self.adversary_erm.ptr,:])
                 np.save(f, self.adversary_erm.next_state[:self.adversary_erm.ptr,:])
@@ -279,7 +280,10 @@ class td3_adversary(Node):
         if self.episode < self.stop_episode:
             self.reset()
         else:
-            subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/adversary_resetter.py', shell=True)
+            if self.episode % self.switch_every == 0:
+                subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py false', shell=True)
+            else:                
+                subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py true', shell=True)
             self.popen_called = True
         return
 

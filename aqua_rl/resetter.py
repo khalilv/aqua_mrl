@@ -1,14 +1,20 @@
 from pynput.keyboard import Key, Controller
 import subprocess
 import time
+import sys
+
+is_adv = sys.argv[1]
+is_adv = is_adv.lower() == 'true'
+
 # This includes a set of steps to take to make sure that we reset almost everything in the simulator
 # Starting with the nodes, we have to kill the nodes
 # our controller
 print('Timely reset initiated...')
-nodes_list = ['supervisor','dqn_controller', 'default_server_', 'diver_controlle', 'autopilot', 'detect']
+nodes_list = ['supervisor','dqn_controller', 'td3_adversary', 'default_server_', 'diver_controlle', 'autopilot', 'detect', 'current_control']
 for i in range(len(nodes_list)):
     returned_output = subprocess.run('pgrep ' + nodes_list[i], capture_output=True, shell=True)
-    subprocess.run('kill -9 ' + returned_output.stdout.decode("utf-8")[:-1], shell=True)
+    if returned_output.stdout.decode("utf-8")[:-1] != '':
+        subprocess.run('kill -9 ' + returned_output.stdout.decode("utf-8")[:-1], shell=True)
 
 print('Resetting the simulator')
 time.sleep(20)
@@ -49,5 +55,9 @@ subprocess.run('ros2 service call /a13/system/set_mode aqua2_interfaces/srv/SetS
                shell=True)
 
 time.sleep(5)
-print('Running the controller..')
-subprocess.Popen('ros2 run aqua_rl dqn_controller', shell=True)
+if is_adv:
+    print('Running the adversary..')
+    subprocess.Popen('ros2 run aqua_rl td3_adversary', shell=True)
+else:
+    print('Running the controller..')
+    subprocess.Popen('ros2 run aqua_rl dqn_controller', shell=True)

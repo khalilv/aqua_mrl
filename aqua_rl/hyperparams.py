@@ -38,7 +38,10 @@ sharpness_ = 0.1
 
 #adversary hyperparams
 adv_action_space_ = 3
-adv_limit_ = 0.25
+adv_limit_ = 0.3
+
+#rarl hyperparams
+switch_every_ = 250
 
 #training hyperparams
 load_erm_ = True
