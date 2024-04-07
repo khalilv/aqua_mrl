@@ -133,10 +133,10 @@ class TD3(object):
 		limit,
 		discount=0.99,
 		tau=0.005,
-		policy_noise=0.2,
-		noise_clip=0.5,
+		policy_noise=0.05,
+		noise_clip=0.075,
 		policy_freq=2,
-		expl_noise = 0.1,
+		expl_noise = 0.2,
 		capacity = 50000
 	):
 		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

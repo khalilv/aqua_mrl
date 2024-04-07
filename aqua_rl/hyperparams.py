@@ -45,7 +45,7 @@ switch_every_ = 250
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 2
+experiment_number_ = 3
 train_for_ = 10
 pid_decay_start_ = 0
 pid_decay_end_ = 0

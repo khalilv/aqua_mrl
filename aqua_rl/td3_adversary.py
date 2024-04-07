@@ -204,7 +204,7 @@ class td3_adversary(Node):
             pitch_reward, yaw_reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sharpness)
             self.episode_rewards.append(pitch_reward + yaw_reward)
             self.reward = -0.5*(pitch_reward + yaw_reward) #sum rewards together and divide by negative two to keep rewards in range [-1,1]
-            
+
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
                 self.adversary_action = self.td3.select_action(self.next_state)
