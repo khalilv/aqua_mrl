@@ -49,6 +49,15 @@ class ReplayBuffer(object):
 			torch.FloatTensor(self.not_done[ind]).to(self.device)
 		)
 	
+	def get(self, idx):
+		return (
+			torch.FloatTensor(self.state[idx]).to(self.device),
+			torch.FloatTensor(self.action[idx]).to(self.device),
+			torch.FloatTensor(self.next_state[idx]).to(self.device),
+			torch.FloatTensor(self.reward[idx]).to(self.device),
+			torch.FloatTensor(self.not_done[idx]).to(self.device)
+		)
+	
 	def add_batch(self, states, actions, next_states, rewards, not_dones, n):
 		self.state[self.ptr:self.ptr+n] = states
 		self.action[self.ptr:self.ptr+n] = actions

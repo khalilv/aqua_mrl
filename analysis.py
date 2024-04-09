@@ -30,98 +30,23 @@ def episodic_returns(exp):
     plt.legend()
     plt.show()
 
-def depth_distribution(exp):
-    t_dir = './experiments/{}/trajectories/'.format(str(exp))
-    e_dir = './experiments/{}/weights/'.format(str(exp))
-    train_depth_mean = []
-    train_depth_std = []
-    train_x = []
-    eval_depth_mean = []
-    eval_depth_std = []
-    eval_x = []
-    for i, file_path in enumerate(sorted(os.listdir(t_dir))):
-        # check if current file_path is a file
-        file = os.path.join(t_dir, file_path)
-        if os.path.isfile(file):
-            with open(file, 'rb') as f:
-                _ = np.load(f)
-                trajectory = np.load(f)
-                depths = np.array(trajectory[:,1])
-                if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
-                    eval_depth_mean.append(np.mean(depths))
-                    eval_depth_std.append(np.std(depths))
-                    eval_x.append(i)
-                else:
-                    train_depth_mean.append(np.mean(depths))
-                    train_depth_std.append(np.std(depths))
-                    train_x.append(i)
-                        
-    plt.errorbar(x=train_x, y=train_depth_mean, yerr=train_depth_std, ecolor='red', fmt='.')
-    plt.errorbar(x=eval_x, y=eval_depth_mean, yerr=eval_depth_std, ecolor='yellow', fmt='o')
-    plt.show()
-
-def duration_distribution(exp):
-    t_dir = './experiments/{}/trajectories/'.format(str(exp))
-    e_dir = './experiments/{}/weights/'.format(str(exp))
-    train_duration = []
-    train_x = []
-    eval_duration = []
-    eval_x = []
-    for i, file_path in enumerate(sorted(os.listdir(t_dir))):
-        # check if current file_path is a file
-        file = os.path.join(t_dir, file_path)
-        if os.path.isfile(file):
-            with open(file, 'rb') as f:
-                _ = np.load(f)
-                trajectory = np.load(f)
-                duration = trajectory.shape[0]
-                if os.path.exists(os.path.join(e_dir, file_path.replace('npy', 'pt'))):
-                    eval_duration.append(duration)
-                    eval_x.append(i)
-                else:
-                    train_duration.append(duration)
-                    train_x.append(i)
-                        
-    plt.plot(train_x, train_duration, color='blue', label='Train')
-    plt.plot(eval_x, eval_duration, color='yellow', label='Eval')
-    plt.xlabel('Episode')
-    plt.ylabel('Timesteps')
-    plt.title('Duration')
-    plt.legend()
-    plt.show()
-
-def plot_trajectory(file, target):
-    with open(file, 'rb') as f:
-        _ = np.load(f)
-        trajectory = np.load(f)
-        xl = trajectory[:,0]
-        yl = trajectory[:,1]
-        zl = trajectory[:,2]
-
-    with open(target, 'rb') as f:
-        xt = np.load(f)
-        yt = np.load(f)
-        zt = np.load(f)
-
-    ax = plt.axes(projection='3d')
-    ax.plot3D(xt, zt, yt, 'green', label='Target')
-    ax.plot3D(xl, zl, yl, 'yellow', label='Trajectory')
-
-    plt.legend()
-    plt.show()
-
-def analyze_erm(erm_path):
+def analyze_erm(root_path):
     import torch
     from aqua_rl import hyperparams
-    from aqua_rl.helpers import action_mapping
     from aqua_rl.control.DQN import ReplayMemory, Transition
     from matplotlib import pyplot as plt
     history_size = hyperparams.history_size_
-    yaw_actions = np.linspace(-hyperparams.yaw_angle_limit_, hyperparams.yaw_angle_limit_, hyperparams.yaw_action_space_)
-    pitch_actions = np.linspace(-hyperparams.pitch_angle_limit_, hyperparams.pitch_angle_limit_, hyperparams.pitch_action_space_)
+    yaw_actions = np.linspace(-hyperparams.yaw_limit_, hyperparams.yaw_limit_, hyperparams.yaw_action_space_)
+    pitch_actions = np.linspace(-hyperparams.pitch_limit_, hyperparams.pitch_limit_, hyperparams.pitch_action_space_)
     erm = ReplayMemory(10000)
-    memory = torch.load(erm_path, map_location= torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    erm = memory['memory']
+    save_memory_path = os.path.join(root_path, 'erm')
+
+    for file_path in sorted(os.listdir(save_memory_path), reverse=True):
+        if os.path.isfile(os.path.join(save_memory_path, file_path)):
+            if erm.__len__() < 10000:
+                memory = torch.load(os.path.join(save_memory_path, file_path), map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+                erm.memory += memory['memory'].memory
+
     for i in range(erm.__len__()):
         transition = erm.get(i)
         transition = Transition(*zip(*transition))
@@ -134,17 +59,17 @@ def analyze_erm(erm_path):
         yaw_action = torch.cat(transition.yaw_action).detach().cpu().numpy()[0][0]
         pitch_reward = torch.cat(transition.pitch_reward).detach().cpu().numpy()        
         yaw_reward = torch.cat(transition.yaw_reward).detach().cpu().numpy()
-        sy,sx = state[0][0:int(history_size*2):2], state[0][1:int(history_size*2)+1:2]
-        nsy, nsx = next_state[0][0:int(history_size*2):2], next_state[0][1:int(history_size*2)+1:2]
+        sy,sx = state[0][0:int(history_size*2):3], state[0][1:int(history_size*2)+1:3]
+        nsy, nsx = next_state[0][0:int(history_size*2):3], next_state[0][1:int(history_size*2)+1:3]
         plt.figure(figsize=(30,30))
-        plt.xlim([0, hyperparams.img_size_])
-        plt.ylim([0, hyperparams.img_size_])
+        plt.xlim([-1, 1])
+        plt.ylim([1, -1])
         plt.plot(sx, sy, label='state')
-        plt.plot(sx[0], sy[0], c='g', marker='o', markersize=5 )
-        plt.plot(sx[-1], sy[-1], c='b', marker='o', markersize=5 )
+        plt.plot(sx[0], sy[0], c='lightgreen', marker='o', markersize=5 )
+        plt.plot(sx[-1], sy[-1], c='lightblue', marker='o', markersize=5 )
         plt.plot(nsx, nsy, label='next state')
-        plt.plot(nsx[0], nsy[0], c='g', marker='o', markersize=5)
-        plt.plot(nsx[-1], nsy[-1], c='b', marker='o', markersize=5)
+        plt.plot(nsx[0], nsy[0], c='darkgreen', marker='o', markersize=5)
+        plt.plot(nsx[-1], nsy[-1], c='darkblue', marker='o', markersize=5)
         plt.legend()
         title = "Action: "
         pitch = pitch_actions[int(pitch_action)]
@@ -155,52 +80,72 @@ def analyze_erm(erm_path):
             title += "(pitch {} down, ".format(np.abs(pitch))
         elif pitch == 0.0:
             title += "(no pitch, "
-
         if yaw < 0:
             title += "yaw {} left) ".format(np.abs(yaw))
         elif yaw > 0:
             title += "yaw {} right) ".format(np.abs(yaw))
         elif yaw == 0.0:
             title += "no yaw) "
-
         title += 'pitch reward: {}, yaw reward: {}'.format(pitch_reward, yaw_reward)
         plt.suptitle(title)
         plt.show()
 
-def analyze_adv_erm(erm_path):
-    import torch
+def analyze_adv_erm(root_path):
+    # x+ = right 
+    # Z+ = backwards
+    # y+ = down
     from aqua_rl import hyperparams
-    from aqua_rl.helpers import adv_mapping
-    from aqua_rl.control.DQN import ReplayMemory, Transition
+    from aqua_rl.control.TD3 import ReplayBuffer
     from matplotlib import pyplot as plt
     history_size = hyperparams.history_size_
-    target_depth = hyperparams.target_depth_
-    erm = ReplayMemory(10000)
-    memory = torch.load(erm_path, map_location= torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    erm = memory['memory']
-    while True:
-        transition = erm.sample(1)
-        transition = Transition(*zip(*transition))
-        state = torch.cat(transition.state).detach().cpu().numpy()
-        state_depths = torch.cat(transition.state_depths).detach().cpu().numpy()
-        state_actions = torch.cat(transition.state_actions).detach().cpu().numpy()
-        next_state = torch.cat(transition.next_state).detach().cpu().numpy()
-        next_state_depths = torch.cat(transition.next_state_depths).detach().cpu().numpy()
-        next_state_actions = torch.cat(transition.next_state_actions).detach().cpu().numpy()
-        action = torch.cat(transition.action).detach().cpu().numpy()
-        reward = torch.cat(transition.reward).detach().cpu().numpy()
-        fig, axs = plt.subplots(2, history_size, figsize=(30,30))
-        for i in range(state.shape[1]):
-            axs[0,i].imshow(state[0,i,:,:])
-            axs[0,i].set_title("{}, {}".format(np.round(state_depths[0,i] - target_depth, decimals=3), state_actions[0,i]))
-        for i in range(next_state.shape[1]):
-            axs[1,i].imshow(next_state[0,i,:,:])
-            axs[1,i].set_title("{}, {}".format(np.round(next_state_depths[0,i] - target_depth, decimals=3), next_state_actions[0,i]))
-        action_idx = action[0][0]
-        x, y, z = adv_mapping(action_idx)
-        title = "Action (x: {}, y: {}, z: {})".format(x,y,z)
-        title += 'Reward: {}'.format(reward)
-        fig.suptitle(title, fontsize=30)
+    erm = ReplayBuffer(int(history_size * 3), hyperparams.adv_action_space_, 10000)
+    save_memory_path = os.path.join(root_path, 'erm/adv')
+    for file_path in sorted(os.listdir(save_memory_path), reverse=True):
+        if os.path.isfile(os.path.join(save_memory_path, file_path)):
+            with open(os.path.join(save_memory_path, file_path), 'rb') as f:
+                states = np.load(f)
+                actions = np.load(f)
+                next_states = np.load(f)
+                rewards = np.load(f)
+                not_dones = np.load(f)
+                if erm.size + len(states) < 10000:
+                    erm.add_batch(states,actions,next_states,rewards,not_dones,len(states))
+
+    for i in range(erm.size):
+        state, action, next_state, reward, not_done = erm.get(i)
+        state = state.detach().cpu().numpy()
+        next_state = next_state.detach().cpu().numpy()
+        action = action.detach().cpu().numpy()
+        reward = reward.detach().cpu().numpy()
+        not_done = not_done.detach().cpu().numpy()
+        sy,sx = state[0:int(history_size*2):3], state[1:int(history_size*2)+1:3]
+        nsy, nsx = next_state[0:int(history_size*2):3], next_state[1:int(history_size*2)+1:3]
+        plt.figure(figsize=(30,30))
+        plt.xlim([-1, 1])
+        plt.ylim([1, -1])
+        plt.plot(sx, sy, label='state')
+        plt.plot(sx[0], sy[0], c='lightgreen', marker='o', markersize=5 )
+        plt.plot(sx[-1], sy[-1], c='lightblue', marker='o', markersize=5 )
+        plt.plot(nsx, nsy, label='next state')
+        plt.plot(nsx[0], nsy[0], c='darkgreen', marker='x', markersize=5)
+        plt.plot(nsx[-1], nsy[-1], c='darkblue', marker='x', markersize=5)
+        plt.legend()
+        title = "Action: ("
+        if action[0] < 0:
+            title += '{} left '.format(action[0])
+        else:
+            title += '{} right '.format(action[0])
+        if action[1] < 0:
+            title += '{} forwards '.format(action[1])
+        else:
+            title += '{} backwards '.format(action[1])
+        if action[2] < 0:
+            title += '{} up '.format(action[2])
+        else:
+            title += '{} down '.format(action[2])
+
+        title += ') reward: {}'.format(reward[0])
+        plt.suptitle(title)
         plt.show()
 
 def eval(exp):
@@ -222,5 +167,6 @@ episode = 296
 file = './experiments/{}/trajectories/episode_{}.npy'.format(str(experiment), str(episode).zfill(5))
 target = './rope_center.npy'
 
-analyze_erm('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/0/erm/episode_00505.pt')
+# analyze_erm('/home/khalilv/Documents/aqua/aqua_rl/experiments/0')
 
+analyze_adv_erm('/home/khalilv/Documents/aqua/aqua_rl/experiments/0')
