@@ -31,7 +31,7 @@ setup(
             'autopilot = aqua_rl.autopilot:main',
             'current_controller = aqua_rl.current_controller:main',
             'td3_adversary = aqua_rl.td3_adversary:main',
-
+            'interdependency = aqua_rl.interdependency:main',
         ],
     },
 )
