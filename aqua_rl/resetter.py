@@ -10,7 +10,7 @@ is_adv = is_adv.lower() == 'true'
 # Starting with the nodes, we have to kill the nodes
 # our controller
 print('Timely reset initiated...')
-nodes_list = ['supervisor','dqn_controller', 'td3_adversary', 'default_server_', 'diver_controlle', 'autopilot', 'detect', 'current_control']
+nodes_list = ['supervisor','dqn_controller', 'dqn_adversary', 'default_server_', 'diver_controlle', 'autopilot', 'detect', 'current_control']
 for i in range(len(nodes_list)):
     returned_output = subprocess.run('pgrep ' + nodes_list[i], capture_output=True, shell=True)
     if returned_output.stdout.decode("utf-8")[:-1] != '':
@@ -57,7 +57,7 @@ subprocess.run('ros2 service call /a13/system/set_mode aqua2_interfaces/srv/SetS
 time.sleep(5)
 if is_adv:
     print('Running the adversary..')
-    subprocess.Popen('ros2 run aqua_rl td3_adversary', shell=True)
+    subprocess.Popen('ros2 run aqua_rl dqn_adversary', shell=True)
 else:
     print('Running the controller..')
     subprocess.Popen('ros2 run aqua_rl dqn_controller', shell=True)

@@ -2,27 +2,28 @@ import rclpy
 import torch
 import numpy as np 
 import os
-import copy
 import subprocess
+import shutil
+import copy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, UInt8MultiArray
 from std_srvs.srv import SetBool
 from time import sleep, time
-from aqua_rl.control.DQN import DQN
-from aqua_rl.control.TD3 import TD3, ReplayBuffer
-from aqua_rl.helpers import reward_calculation, normalize_coords
+from aqua_rl.control.DQN import DQN, ReplayMemory
+from aqua_rl.control.PID import PID
+from aqua_rl.helpers import reward_calculation, normalize_coords, safe_region, get_command, get_current
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
 
-class td3_adversary(Node):
+class dqn_adversary(Node):
     def __init__(self):
-        super().__init__('td3_adversary')
+        super().__init__('dqn_adversary')
 
         #hyperparams
         self.queue_size = hyperparams.queue_size_
+        self.history_size = hyperparams.history_size_
         self.yaw_action_space = hyperparams.yaw_action_space_
         self.pitch_action_space = hyperparams.pitch_action_space_
-        self.history_size = hyperparams.history_size_
         self.img_size = hyperparams.img_size_
         self.load_erm = hyperparams.load_erm_ 
         self.experiment_number = hyperparams.experiment_number_
@@ -32,16 +33,15 @@ class td3_adversary(Node):
         self.reward_sharpness = hyperparams.sharpness_
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_
-        self.adversary_limit = hyperparams.adv_limit_
         self.adversary_action_space = hyperparams.adv_action_space_
         self.switch_every = hyperparams.switch_every_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(UInt8MultiArray, hyperparams.autopilot_command_, self.queue_size)
-        self.current_publisher = self.create_publisher(Float32MultiArray, hyperparams.adv_command_topic_name_, self.queue_size)
+        self.current_publisher = self.create_publisher(UInt8MultiArray, hyperparams.adv_command_topic_name_, self.queue_size)
         self.autopilot_start_stop_client = self.create_client(SetBool, hyperparams.autopilot_start_stop_)
-        self.current_start_stop_client = self.create_client(SetBool, hyperparams.adv_start_stop_)
         self.diver_start_stop_client = self.create_client(SetBool, hyperparams.diver_start_stop_)
+        self.current_start_stop_client = self.create_client(SetBool, hyperparams.adv_start_stop_)
         self.detection_subscriber = self.create_subscription(
             Float32MultiArray, 
             hyperparams.detection_topic_name_, 
@@ -57,67 +57,61 @@ class td3_adversary(Node):
         self.complete = False
         self.evaluate = False 
 
-        self.td3 = TD3(self.history_size, self.adversary_action_space, self.adversary_limit)
-        
         #dqn controller for yaw and pitch 
-        self.dqn = DQN(self.pitch_action_space, self.yaw_action_space, self.history_size) 
+        self.dqn = DQN(int(self.pitch_action_space * self.yaw_action_space), self.history_size) 
+
+        self.adv = DQN(int(np.power(3, self.adversary_action_space)), self.history_size)
         self.state = None
         self.next_state = None
-        self.adversary_action = None  
-        self.reward = None      
+        self.action = None        
+        self.reward = None
         self.history = []
         self.episode_rewards = []
-        self.adversary_erm = ReplayBuffer(int(self.history_size * 3), self.adversary_action_space, self.td3.memory_capacity)
+        self.erm = ReplayMemory(self.adv.MEMORY_SIZE)
 
         self.root_path = 'src/aqua_rl/experiments/{}'.format(str(self.experiment_number))
+       
         self.save_path = os.path.join(self.root_path, 'weights/adv')
         self.save_memory_path = os.path.join(self.root_path, 'erm/adv')
         self.save_traj_path = os.path.join(self.root_path, 'trajectories/adv')
         self.writer = SummaryWriter(os.path.join(self.root_path, 'logs/adv'))
         last_checkpoint = max(sorted(os.listdir(self.save_path)))
-        checkpoint = torch.load(os.path.join(self.save_path, last_checkpoint), map_location=self.td3.device)
-        self.td3.critic.load_state_dict(checkpoint['critic_state_dict'], strict=True)
-        self.td3.critic_optimizer.load_state_dict(checkpoint['critic_optim_state_dict'])
-        self.critic_target = copy.deepcopy(self.td3.critic)
-        self.td3.actor.load_state_dict(checkpoint['actor_state_dict'], strict=True)
-        self.td3.actor_optimizer.load_state_dict(checkpoint['actor_optim_state_dict'])
-        self.actor_target = copy.deepcopy(self.td3.actor)
-        self.td3.total_it = checkpoint['total_it']
-
-        self.dqn_save_path = os.path.join(self.root_path, 'weights')
-        last_dqn_checkpoint = max(sorted(os.listdir(self.dqn_save_path)))
-        dqn_checkpoint = torch.load(os.path.join(self.dqn_save_path, last_dqn_checkpoint), map_location=self.dqn.device)
-        self.dqn.policy_net.load_state_dict(dqn_checkpoint['model_state_dict_policy'], strict=True)
-        self.dqn.target_net.load_state_dict(dqn_checkpoint['model_state_dict_target'], strict=True)
-        self.dqn.optimizer.load_state_dict(dqn_checkpoint['optimizer_state_dict'])
-        self.dqn.steps_done = dqn_checkpoint['training_steps']
-        print('DQN loaded. Steps completed: ', self.dqn.steps_done)
+        checkpoint = torch.load(os.path.join(self.save_path, last_checkpoint), map_location=self.adv.device)
+        self.adv.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
+        self.adv.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
+        self.adv.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.adv.steps_done = checkpoint['training_steps']
+        
+        self.pro_save_path = os.path.join(self.root_path, 'weights')
+        last_pro_checkpoint = max(sorted(os.listdir(self.pro_save_path)))
+        pro_checkpoint = torch.load(os.path.join(self.pro_save_path, last_pro_checkpoint), map_location=self.dqn.device)
+        self.dqn.policy_net.load_state_dict(pro_checkpoint['model_state_dict_policy'], strict=True)
+        self.dqn.target_net.load_state_dict(pro_checkpoint['model_state_dict_target'], strict=True)
+        self.dqn.optimizer.load_state_dict(pro_checkpoint['optimizer_state_dict'])
+        self.dqn.steps_done = pro_checkpoint['training_steps']
+        print('DQN protagonist loaded. Steps completed: ', self.dqn.steps_done)
 
         if self.load_erm:
             print('Loading ERM from previous experience. Note this may take time')
             t0 = time()
             for file_path in sorted(os.listdir(self.save_memory_path), reverse=True):
                 if os.path.isfile(os.path.join(self.save_memory_path, file_path)):
-                    with open(os.path.join(self.save_memory_path, file_path), 'rb') as f:
-                        states = np.load(f)
-                        actions = np.load(f)
-                        next_states = np.load(f)
-                        rewards = np.load(f)
-                        not_dones = np.load(f)
-                        if self.td3.memory.size + len(states) < self.td3.memory_capacity:
-                            self.td3.memory.add_batch(states,actions,next_states,rewards,not_dones,len(states))
+                    if self.adv.memory.__len__() < self.adv.MEMORY_SIZE:
+                        memory = torch.load(os.path.join(self.save_memory_path, file_path), map_location=self.adv.device)
+                        erm = memory['memory']
+                        self.adv.memory.memory += erm.memory
             t1 = time()
-            print('ERM size: ', self.td3.memory.size, '. Time taken to load: ', t1 - t0)
+            print('ERM size: ', self.adv.memory.__len__(), '. Time taken to load: ', t1 - t0)
         else:
             print('WARNING: weights loaded but starting from a fresh replay memory')
         
         self.episode = int(last_checkpoint[8:13]) + 1
         self.stop_episode = self.episode + self.train_for - 1
-        print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.td3.total_it)
-    
+        print('Weights loaded. starting from episode: ', self.episode, ', training steps completed: ', self.adv.steps_done)
+        
         #autopilot commands
         self.command = UInt8MultiArray()
-        self.adversary_command = Float32MultiArray()
+        self.adversary_command = UInt8MultiArray()
 
         #autopilot start stop service data
         self.autopilot_start_stop_req = SetBool.Request()
@@ -138,7 +132,7 @@ class td3_adversary(Node):
         #popen_called
         self.popen_called = False
 
-        print('Initialized: td3 adversary')
+        print('Initialized: dqn controller')
     
 
     def detection_callback(self, coords):
@@ -157,7 +151,7 @@ class td3_adversary(Node):
             print('Starting diver controller')
             self.diver_start_stop_req.data = True
             self.diver_start_stop_client.call_async(self.diver_start_stop_req)
-        
+
         if not self.current_start_stop_req.data:
             print('Starting current controller')
             self.current_start_stop_req.data = True
@@ -199,41 +193,68 @@ class td3_adversary(Node):
         self.history.append(dqn_state)
         if len(self.history) == self.history_size:
             ns = np.array(self.history).flatten()
-            self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
+            self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.adv.device).unsqueeze(0)
             
-            pitch_reward, yaw_reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sharpness)
-            self.episode_rewards.append(pitch_reward + yaw_reward)
-            self.reward = -0.5*(pitch_reward + yaw_reward) #sum rewards together and divide by negative two to keep rewards in range [-1,1]
-
+            reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sharpness)
+            self.episode_rewards.append(reward)
+            self.reward = torch.tensor([-reward], dtype=torch.float32, device=self.adv.device)
+            
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.adversary_action = self.td3.select_action(self.next_state)
+                self.action = self.adv.select_eval_action(self.next_state)
             else:
                 if self.state is not None:
-                    self.td3.memory.add(self.state.detach().cpu().numpy(), self.adversary_action.detach().cpu().numpy(), self.next_state.detach().cpu().numpy(), self.reward, False)
-                    self.adversary_erm.add(self.state.detach().cpu().numpy(), self.adversary_action.detach().cpu().numpy(), self.next_state.detach().cpu().numpy(), self.reward, False)
+                    self.adv.memory.push(self.state, self.action, self.next_state, self.reward)
+                    self.erm.push(self.state, self.action, self.next_state, self.reward)
                 
-                #add noise to action
-                self.adversary_action = (self.td3.select_action(self.next_state) + torch.tensor(np.random.normal(0, self.td3.limit * self.td3.expl_noise, size=self.adversary_action_space), device=self.td3.device)).clip(-self.td3.limit, self.td3.limit)       
+                self.action = self.adv.select_action(self.next_state)  
+                
+                # #override dqn actions if they are outside the safe region
+                # region = safe_region(self.dqn.steps_done, self.pid_decay_start, self.pid_decay_end)
+                # if np.abs(dqn_state[0]) >= region:
+                #     pa = self.discretize(self.pitch_pid.control(dqn_state[0]), self.pitch_actions)
+                #     self.pitch_action = torch.tensor([[int(pa)]], device=self.dqn.device)
+                # if np.abs(dqn_state[1]) >= region:
+                #     ya = self.discretize(self.yaw_pid.control(dqn_state[1]), self.yaw_actions)
+                #     self.yaw_action = torch.tensor([[int(ya)]], device=self.dqn.device) 
+
                 self.state = self.next_state
                
                 # Perform one step of the optimization (on the policy network)
-                loss = self.td3.train()
+                loss = self.adv.optimize()
                 if loss is not None:        
-                    self.writer.add_scalar('Loss', loss, self.td3.total_it)
+                    self.writer.add_scalar('Loss', loss, self.adv.steps_done)
+                # Soft update of the target network's weights
+                # θ′ ← τ θ + (1 −τ )θ′
+                target_net_state_dict = self.adv.target_net.state_dict()
+                policy_net_state_dict = self.adv.policy_net.state_dict()
+                for key in policy_net_state_dict:
+                    target_net_state_dict[key] = policy_net_state_dict[key]*self.adv.TAU + target_net_state_dict[key]*(1-self.adv.TAU)
+                self.adv.target_net.load_state_dict(target_net_state_dict)
 
+                # #in initial stages, set random pid target to explore state space
+                # if self.dqn.steps_done < self.pid_decay_start:
+                #     if self.dqn.steps_done % 25 == 0 and self.dqn.steps_done > 0 :
+                #         self.pitch_pid.target = np.random.uniform(-0.8, 0.8)
+                #         self.yaw_pid.target = np.random.uniform(-0.8, 0.8)
+                # #otherwise pid should always try to keep the target at 0
+                # else: 
+                #     self.pitch_pid.target = 0.0
+                #     self.yaw_pid.target = 0.0
+
+            #always publish pro and adv action 
+            adversary_action = self.action.detach().cpu().numpy()[0][0]
+            current = get_current(adversary_action, self.adversary_action_space)
+            self.adversary_command.data = [int(current[0]), int(current[1]), int(current[2])]
+            self.current_publisher.publish(self.adversary_command)
+            
             #publish actions
-            pitch_action, yaw_action = self.dqn.select_eval_action(self.next_state)
-            pitch_action_idx = pitch_action.detach().cpu().numpy()[0][0]
-            yaw_action_idx = yaw_action.detach().cpu().numpy()[0][0]
+            action_idx = self.dqn.select_eval_action(self.next_state).detach().cpu().numpy()[0][0]
+            pitch_action_idx, yaw_action_idx = get_command(action_idx, self.pitch_action_space, self.yaw_action_space)
             self.command.data = [int(pitch_action_idx), int(yaw_action_idx)]
             self.command_publisher.publish(self.command)
-
-            current = self.adversary_action.detach().cpu().numpy()[0]
-            self.adversary_command.data = [float(current[0]), float(current[1]), float(current[2])]
-            self.current_publisher.publish(self.adversary_command)
-
             self.history = self.history[self.frame_skip:]
+
         return 
     
     def finish(self):
@@ -247,33 +268,28 @@ class td3_adversary(Node):
         print('Episode rewards. Average: ', mean_rewards, ' Sum: ', sum_rewards)
         
         if self.evaluate:
-            self.writer.add_scalar('Episode Rewards (Eval)', sum_rewards, self.td3.total_it)
+            self.writer.add_scalar('Episode Rewards (Eval)', sum_rewards, self.adv.steps_done)
         else:
-            self.writer.add_scalar('Episode Rewards (Train)', sum_rewards, self.td3.total_it)
+            self.writer.add_scalar('Episode Rewards (Train)', sum_rewards, self.adv.steps_done)
 
-        self.writer.add_scalar('Duration', self.duration, self.td3.total_it)
+        self.writer.add_scalar('Duration', self.duration, self.adv.steps_done)
 
         if self.state is not None and not self.evaluate and not self.complete:
-            self.td3.memory.add(self.state.detach().cpu().numpy(), self.adversary_action.detach().cpu().numpy(), self.next_state.detach().cpu().numpy(), self.reward, True)
-            self.adversary_erm.add(self.state.detach().cpu().numpy(), self.adversary_action.detach().cpu().numpy(), self.next_state.detach().cpu().numpy(), self.reward, True)
-                
+            self.adv.memory.push(self.state, self.action, None, self.reward)
+            self.erm.push(self.state, self.action, None, self.reward)
+
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
             torch.save({
-                'critic_state_dict': self.td3.critic.state_dict(),
-                'critic_optim_state_dict': self.td3.critic_optimizer.state_dict(),
-                'actor_state_dict': self.td3.actor.state_dict(),
-                'actor_optim_state_dict': self.td3.actor_optimizer.state_dict(),
-                'total_it': self.td3.total_it
+                'training_steps': self.adv.steps_done,
+                'model_state_dict_policy': self.adv.policy_net.state_dict(),
+                'model_state_dict_target': self.adv.target_net.state_dict(),
+                'optimizer_state_dict': self.adv.optimizer.state_dict(),
             }, self.save_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)))
-            
-            with open(self.save_memory_path +  '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
-                np.save(f, self.adversary_erm.state[:self.adversary_erm.ptr,:])
-                np.save(f, self.adversary_erm.action[:self.adversary_erm.ptr,:])
-                np.save(f, self.adversary_erm.next_state[:self.adversary_erm.ptr,:])
-                np.save(f, self.adversary_erm.reward[:self.adversary_erm.ptr,:])
-                np.save(f, self.adversary_erm.not_done[:self.adversary_erm.ptr,:])
-
+            torch.save({
+                'memory': self.erm
+            }, self.save_memory_path +  '/episode_{}.pt'.format(str(self.episode).zfill(5)))
+        
         with open(self.save_traj_path + '/episode_{}.npy'.format(str(self.episode).zfill(5)), 'wb') as f:
             np.save(f, self.episode_rewards)
 
@@ -314,7 +330,7 @@ class td3_adversary(Node):
         self.next_state = None
         self.reward = None
         self.history = []
-        self.adversary_action = None
+        self.action = None
 
         #reset flush queues 
         self.flush_detection = 0
@@ -328,12 +344,15 @@ class td3_adversary(Node):
         self.complete = False
         print('-------------- Completed Reset --------------')
         return
-
+    
+    # def discretize(self, v, l):
+    #     index = np.argmin(np.abs(np.subtract(l,v)))
+    #     return index
     
 def main(args=None):
     rclpy.init(args=args)
 
-    node = td3_adversary()
+    node = dqn_adversary()
 
     rclpy.spin(node)
 

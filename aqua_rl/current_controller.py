@@ -4,7 +4,7 @@ from rclpy.node import Node
 from aqua2_interfaces.msg import UnderwaterAdversaryCommand
 from aqua_rl import hyperparams
 from std_srvs.srv import SetBool
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import UInt8MultiArray
 
 class current_controller(Node):
 
@@ -21,14 +21,18 @@ class current_controller(Node):
             hyperparams.adv_start_stop_,
             self.start_stop_callback)
         self.action_subscriber = self.create_subscription(
-            Float32MultiArray,
+            UInt8MultiArray,
             hyperparams.adv_command_topic_name_,
             self.action_callback,
             self.queue_size)
         
         #command
         self.cmd = UnderwaterAdversaryCommand()
-        
+
+        self.current_x_values = np.linspace(-hyperparams.adv_x_limit_, hyperparams.adv_x_limit_, hyperparams.adv_action_space_)
+        self.current_y_values = np.linspace(-hyperparams.adv_y_limit_, hyperparams.adv_y_limit_, hyperparams.adv_action_space_)
+        self.current_z_values = np.linspace(-hyperparams.adv_z_limit_, hyperparams.adv_z_limit_, hyperparams.adv_action_space_)
+
         #flag to start/stop publishing
         self.publish_flag = False
 
@@ -37,9 +41,9 @@ class current_controller(Node):
     def action_callback(self, action):
         if self.publish_flag:
             action = np.array(action.data)
-            self.cmd.current_x =  float(action[0])
-            self.cmd.current_z =  float(action[1])
-            self.cmd.current_y =  float(action[2])
+            self.cmd.current_x =  self.current_x_values[action[0]]
+            self.cmd.current_y =  self.current_z_values[action[1]]
+            self.cmd.current_z =  self.current_y_values[action[2]]
             #publish
             self.publisher.publish(self.cmd)
         return 
@@ -51,8 +55,8 @@ class current_controller(Node):
         else:
             self.publish_flag = False
             self.cmd.current_x = 0.0
-            self.cmd.current_z = 0.0
             self.cmd.current_y = 0.0
+            self.cmd.current_z = 0.0
             self.publisher.publish(self.cmd)
             response.message = 'Current controller stopped and reset'
         response.success = True

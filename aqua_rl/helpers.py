@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def reward_calculation(yn, xn, detected, sharpness):
     if detected == 1.0:
         pitch_reward = sharpness/(np.abs(yn) + sharpness)
@@ -8,15 +7,13 @@ def reward_calculation(yn, xn, detected, sharpness):
     else:
         pitch_reward = -0.5
         yaw_reward = -0.5
-    return pitch_reward, yaw_reward
+    return max(min(pitch_reward + yaw_reward, 1), -1)
     
-def action_mapping(idx, n):
-    pitch = idx // n
-    yaw = idx % n
-    return pitch, yaw
 
-def inverse_mapping(pitch_idx, yaw_idx, n):
-    return int(pitch_idx * n + yaw_idx)
+def get_command(action, n_pitch_actions, n_yaw_actions):
+    pitch_command = action % n_pitch_actions
+    yaw_command = (action // n_pitch_actions) % n_yaw_actions
+    return pitch_command, yaw_command
 
 def safe_region(steps, s, f):
     if steps < s:
@@ -25,36 +22,25 @@ def safe_region(steps, s, f):
         return (steps - s)/(f-s)
     else:
         return 1.0
-
-def map_missing_detection(yn, xn):
-    if yn < 0:
-        if xn < 0:
-            return -1, -1
-        else:
-            return -1, 1
-    else:
-        if xn < 0:
-            return 1, -1
-        else:
-            return 1, 1
-
+    
 def normalize_coords(y,x,w,h):
     xn = (2 * x / w) - 1
     yn = (2 * y / h) - 1
     return yn, xn
 
-def adv_action_mapping(idx):
-    action_mapping = {
-        0: (0, 0, 0),
-        1: (0, 0, 1),
-        2: (0, 1, 0),
-        3: (0, 1, 1),
-        4: (1, 0, 0),
-        5: (1, 0, 1),
-        6: (1, 1, 0),
-        7: (1, 1, 1)
-    }
-    return action_mapping[idx]
+def get_current(action, action_dim):
+    base3_str = base_conversion(action, 3)
+    base3_str = base3_str.zfill(action_dim)
+    current = [int(digit, 3) for digit in base3_str]
+    return current
+
+def base_conversion(n, base):
+    digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    result = ''
+    while n > 0:
+        result = digits[n % base] + result
+        n //= base
+    return result
     
 def euler_from_quaternion(quaternion):
     """
