@@ -29,7 +29,6 @@ class dqn_adversary(Node):
         self.experiment_number = hyperparams.experiment_number_
         self.train_for = hyperparams.train_for_
         self.train_duration = hyperparams.train_duration_
-        self.eval_duration = hyperparams.eval_duration_
         self.reward_sharpness = hyperparams.sharpness_
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_

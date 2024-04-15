@@ -32,6 +32,8 @@ setup(
             'current_controller = aqua_rl.current_controller:main',
             'dqn_adversary = aqua_rl.dqn_adversary:main',
             'interdependency = aqua_rl.interdependency:main',
+            'evaluation = aqua_rl.evaluation:main',
+
         ],
     },
 )

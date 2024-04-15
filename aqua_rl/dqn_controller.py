@@ -29,7 +29,6 @@ class dqn_controller(Node):
         self.experiment_number = hyperparams.experiment_number_
         self.train_for = hyperparams.train_for_
         self.train_duration = hyperparams.train_duration_
-        self.eval_duration = hyperparams.eval_duration_
         self.reward_sharpness = hyperparams.sharpness_
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_
@@ -281,7 +280,7 @@ class dqn_controller(Node):
                 #     self.yaw_pid.target = 0.0
 
                 #publish adversary action during training
-                adversary_action = self.dqn.select_eval_action(self.next_state).detach().cpu().numpy()[0][0]
+                adversary_action = self.adv.select_eval_action(self.next_state).detach().cpu().numpy()[0][0]
                 current = get_current(adversary_action, self.adversary_action_space)
                 self.adversary_command.data = [int(current[0]), int(current[1]), int(current[2])]
                 self.current_publisher.publish(self.adversary_command)
