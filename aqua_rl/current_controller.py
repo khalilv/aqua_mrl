@@ -42,8 +42,8 @@ class current_controller(Node):
         if self.publish_flag:
             action = np.array(action.data)
             self.cmd.current_x =  self.current_x_values[action[0]]
-            self.cmd.current_y =  self.current_z_values[action[1]]
-            self.cmd.current_z =  self.current_y_values[action[2]]
+            self.cmd.current_y =  self.current_y_values[action[1]]
+            self.cmd.current_z =  self.current_z_values[action[2]]
             #publish
             self.publisher.publish(self.cmd)
         return 

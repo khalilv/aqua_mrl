@@ -1,15 +1,5 @@
 import numpy as np
 
-def reward_calculation(yn, xn, detected, sharpness):
-    if detected == 1.0:
-        pitch_reward = sharpness/(np.abs(yn) + sharpness)
-        yaw_reward = sharpness/(np.abs(xn) + sharpness)
-    else:
-        pitch_reward = -0.5
-        yaw_reward = -0.5
-    return max(min(pitch_reward + yaw_reward, 1), -1)
-    
-
 def get_command(action, n_pitch_actions, n_yaw_actions):
     pitch_command = action % n_pitch_actions
     yaw_command = (action // n_pitch_actions) % n_yaw_actions
@@ -65,3 +55,12 @@ def euler_from_quaternion(quaternion):
     yaw = np.arctan2(siny_cosp, cosy_cosp)
 
     return roll, pitch, yaw
+
+def reward_calculation(yn, xn, detected, sigma):
+    if detected == 1.0:
+        distance = np.sqrt(xn**2 + yn**2) #distance from the origin
+        reward = np.exp(-distance**2 / (2 * sigma**2)) #reward based on 2D Gaussian distribution
+        reward = np.clip(reward, 0, 1) #clip reward to range [0, 1]
+    else:
+        reward = -1.0
+    return reward

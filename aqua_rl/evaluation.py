@@ -28,7 +28,7 @@ class evaluation(Node):
         self.experiment_number = hyperparams.experiment_number_
         self.eval_for = hyperparams.eval_for_
         self.eval_duration = hyperparams.eval_duration_
-        self.reward_sharpness = hyperparams.sharpness_
+        self.reward_sigma = hyperparams.sigma_
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_
         self.adversary_action_space = hyperparams.adv_action_space_
@@ -167,7 +167,7 @@ class evaluation(Node):
         if len(self.history) == self.history_size:
             s = np.array(self.history).flatten()
             state = torch.tensor(s, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
-            reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sharpness)
+            reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sigma)
             self.episode_rewards.append(reward)
             action = self.dqn.select_eval_action(state)
 

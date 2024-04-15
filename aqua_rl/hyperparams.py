@@ -34,7 +34,7 @@ depth_range_ = [-6, -12]
 train_duration_ = 1000
 
 #reward hyperparams
-sharpness_ = 0.1
+sigma_ = 0.5
 
 #adversary hyperparams
 adv_action_space_ = 3

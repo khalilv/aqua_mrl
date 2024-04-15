@@ -29,7 +29,7 @@ class dqn_controller(Node):
         self.experiment_number = hyperparams.experiment_number_
         self.train_for = hyperparams.train_for_
         self.train_duration = hyperparams.train_duration_
-        self.reward_sharpness = hyperparams.sharpness_
+        self.reward_sigma = hyperparams.sigma_
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_
         self.adversary_action_space = hyperparams.adv_action_space_
@@ -232,7 +232,7 @@ class dqn_controller(Node):
             ns = np.array(self.history).flatten()
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             
-            reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sharpness)
+            reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sigma)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
             

@@ -23,7 +23,7 @@ class pid_controller(Node):
         self.load_erm = hyperparams.load_erm_ 
         self.train_for = hyperparams.train_for_
         self.train_duration = hyperparams.train_duration_
-        self.reward_sharpness = hyperparams.sharpness_
+        self.reward_sigma = hyperparams.sigma_
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_
         self.yaw_gains = hyperparams.yaw_gains_
@@ -140,7 +140,7 @@ class pid_controller(Node):
             ns = np.array(self.history).flatten()
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.device).unsqueeze(0)
             
-            pitch_reward, yaw_reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sharpness)
+            pitch_reward, yaw_reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sigma)
             self.episode_rewards.append([pitch_reward, yaw_reward])
             self.pitch_reward = torch.tensor([pitch_reward], dtype=torch.float32, device=self.device)
             self.yaw_reward = torch.tensor([yaw_reward], dtype=torch.float32, device=self.device)
