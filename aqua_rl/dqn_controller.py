@@ -333,7 +333,7 @@ class dqn_controller(Node):
         if self.episode < self.stop_episode:
             self.reset()
         else:
-            if self.episode % self.switch_every == 0:
+            if self.episode % 200 == 0:
                 subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py true', shell=True)
             else:                
                 subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py false', shell=True)

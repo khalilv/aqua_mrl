@@ -64,7 +64,7 @@ class DQNNetwork(nn.Module):
 class DQN:
 
     def __init__(self, n_actions, history_size) -> None:
-        self.BATCH_SIZE = 64
+        self.BATCH_SIZE = 128
         self.GAMMA = 0.9
         self.EPS_START = 0.9
         self.EPS_END = 0.1

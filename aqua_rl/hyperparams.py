@@ -43,11 +43,11 @@ adv_y_limit_ = 0.35
 adv_z_limit_ = 0.35
 
 #rarl hyperparams
-switch_every_ = 150
+switch_every_ = 50
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 3
+experiment_number_ = 2
 train_for_ = 10
 pid_decay_start_ = 0
 pid_decay_end_ = 0

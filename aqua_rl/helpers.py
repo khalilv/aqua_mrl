@@ -64,3 +64,23 @@ def reward_calculation(yn, xn, detected, sigma):
     else:
         reward = -1.0
     return reward
+# reward = []
+# for y in np.linspace(-1,1,416):
+#     row = []
+#     for x in np.linspace(-1,1,416):
+#         row.append(reward_calculation(y,x,1.0,0.5))
+#     reward.append(row)
+# from matplotlib import pyplot as plt
+ 
+
+# plt.imshow(reward, extent=[-1, 1, 1, -1])
+# plt.colorbar()  # Add colorbar for reference
+
+# # Set x and y axis limits
+# plt.xlim(-1, 1)
+# plt.ylim(1, -1)
+# plt.xticks([-1, 0, 1])
+# plt.yticks([-1, 0, 1])
+# plt.xlabel('Normalized x coordinate')
+# plt.ylabel('Normalized y coordinate')
+# plt.savefig('reward.png', dpi=1200)
