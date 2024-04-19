@@ -81,10 +81,10 @@ class ThreeHeadDQN:
         self.GAMMA = 0.9
         self.EPS_START = 0.9
         self.EPS_END = 0.1
-        self.EPS_DECAY = 250000
+        self.EPS_DECAY = 100000
         self.TAU = 0.0025
         LR = 1e-4
-        self.MEMORY_SIZE = 50000
+        self.MEMORY_SIZE = 20000
         self.n_x_actions = n_x_actions
         self.n_y_actions = n_y_actions
         self.n_z_actions = n_z_actions
