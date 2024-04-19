@@ -13,6 +13,12 @@ class current_controller(Node):
 
         #hyperparams
         self.queue_size = hyperparams.queue_size_
+        self.xlim = hyperparams.adv_x_limit_
+        self.ylim = hyperparams.adv_y_limit_
+        self.zlim = hyperparams.adv_z_limit_
+        self.x_action_space = hyperparams.adv_x_action_space_
+        self.y_action_space = hyperparams.adv_y_action_space_
+        self.z_action_space = hyperparams.adv_z_action_space_
 
         #command publisher
         self.publisher = self.create_publisher(UnderwaterAdversaryCommand, hyperparams.adv_unity_topic_name_, self.queue_size)
@@ -29,9 +35,9 @@ class current_controller(Node):
         #command
         self.cmd = UnderwaterAdversaryCommand()
 
-        self.current_x_values = np.linspace(-hyperparams.adv_x_limit_, hyperparams.adv_x_limit_, hyperparams.adv_action_space_)
-        self.current_y_values = np.linspace(-hyperparams.adv_y_limit_, hyperparams.adv_y_limit_, hyperparams.adv_action_space_)
-        self.current_z_values = np.linspace(-hyperparams.adv_z_limit_, hyperparams.adv_z_limit_, hyperparams.adv_action_space_)
+        self.current_x_values = np.linspace(-self.xlim, self.xlim, self.x_action_space)
+        self.current_y_values = np.linspace(-self.ylim, self.ylim, self.y_action_space)
+        self.current_z_values = np.linspace(-self.zlim, self.zlim, self.z_action_space)
 
         #flag to start/stop publishing
         self.publish_flag = False

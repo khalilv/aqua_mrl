@@ -29,7 +29,7 @@ pitch_action_space_ = 5
 frame_skip_ = 1
 
 #end of episode hyperparams
-empty_state_max_ = 10
+empty_state_max_ = 20
 depth_range_ = [-6, -12]
 train_duration_ = 1000
 
@@ -37,17 +37,20 @@ train_duration_ = 1000
 sigma_ = 0.5
 
 #adversary hyperparams
-adv_action_space_ = 3
-adv_x_limit_ = 0.35
-adv_y_limit_ = 0.35
-adv_z_limit_ = 0.35
+adv_x_action_space_ = 5
+adv_y_action_space_ = 5
+adv_z_action_space_ = 5
+adv_x_limit_ = 0.3
+adv_y_limit_ = 0.3
+adv_z_limit_ = 0.3
 
 #rarl hyperparams
-switch_every_ = 50
+switch_every_ = 200
+switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 2
+experiment_number_ = 4
 train_for_ = 10
 pid_decay_start_ = 0
 pid_decay_end_ = 0

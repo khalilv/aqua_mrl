@@ -9,9 +9,9 @@ from collections import namedtuple, deque
 import torch.nn.init as init
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
+                        ('state', 'pitch_action', 'yaw_action', 'next_state', 'reward'))
 
-class ReplayMemory(object):
+class TwoHeadReplayMemory(object):
 
     def __init__(self, capacity):
         self.memory = deque([], maxlen=capacity)
@@ -30,19 +30,24 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
-class DQNNetwork(nn.Module):
+class TwoHeadDQNNetwork(nn.Module):
 
-    def __init__(self, history, n_actions):
-        super(DQNNetwork, self).__init__()
+    def __init__(self, history, n_pitch_actions, n_yaw_actions):
+        super(TwoHeadDQNNetwork, self).__init__()
         
         self.fc = nn.Sequential(
-            nn.Linear(in_features= history * 3, out_features= 512),
+            nn.Linear(in_features= history * 5 - 2, out_features= 256),
             nn.ReLU(),
-            nn.Linear(in_features= 512, out_features= 256),
-            nn.ReLU(),  
             nn.Linear(in_features= 256, out_features= 128),
-            nn.ReLU(),
-            nn.Linear(in_features= 128, out_features= n_actions)
+            nn.ReLU(),  
+        )
+        
+        self.pitch_fc = nn.Sequential(
+            nn.Linear(in_features= 128, out_features= n_pitch_actions)
+        )
+
+        self.yaw_fc = nn.Sequential(
+            nn.Linear(in_features= 128, out_features= n_yaw_actions)
         )
 
         # Apply He initialization to linear layers
@@ -58,28 +63,32 @@ class DQNNetwork(nn.Module):
     # Called with either one element to determine next action, or a batch
     # during optimization.
     def forward(self, s):
-        q = self.fc(s)
-        return q
+        shared = self.fc(s)
+        pitch = self.pitch_fc(shared)
+        yaw = self.yaw_fc(shared)
+        return pitch, yaw
     
-class DQN:
+    
+class TwoHeadDQN:
 
-    def __init__(self, n_actions, history_size) -> None:
+    def __init__(self, n_pitch_actions, n_yaw_actions, history_size) -> None:
         self.BATCH_SIZE = 128
         self.GAMMA = 0.9
         self.EPS_START = 0.9
         self.EPS_END = 0.1
-        self.EPS_DECAY = 250000
+        self.EPS_DECAY = 200000
         self.TAU = 0.0025
         LR = 1e-4
-        self.MEMORY_SIZE = 50000
-        self.n_actions = n_actions
+        self.MEMORY_SIZE = 20000
+        self.n_pitch_actions = n_pitch_actions
+        self.n_yaw_actions = n_yaw_actions
         self.history_size = history_size
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.policy_net = DQNNetwork(self.history_size, self.n_actions).to(self.device)
-        self.target_net = DQNNetwork(self.history_size, self.n_actions).to(self.device)
+        self.policy_net = TwoHeadDQNNetwork(self.history_size, self.n_pitch_actions, n_yaw_actions).to(self.device)
+        self.target_net = TwoHeadDQNNetwork(self.history_size, self.n_pitch_actions, n_yaw_actions).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=LR, amsgrad=True)
-        self.memory = ReplayMemory(self.MEMORY_SIZE)
+        self.memory = TwoHeadReplayMemory(self.MEMORY_SIZE)
         self.steps_done = 0
         
     def select_action(self, s):
@@ -91,13 +100,15 @@ class DQN:
                 # t.max(1) will return the largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
-                return self.policy_net(s).max(1)[1].view(1, 1)
+                pitch, yaw = self.policy_net(s)
+                return pitch.max(1)[1].view(1, 1), yaw.max(1)[1].view(1, 1)
         else:
-            return torch.tensor([[int(np.random.randint(0,self.n_actions))]], device=self.device, dtype=torch.long)
+            return torch.tensor([[int(np.random.randint(0,self.n_pitch_actions))]], device=self.device, dtype=torch.long), torch.tensor([[int(np.random.randint(0,self.n_yaw_actions))]], device=self.device, dtype=torch.long)
     
     def select_eval_action(self, s):
         with torch.no_grad():
-            return self.target_net(s).max(1)[1].view(1, 1)
+            pitch, yaw = self.target_net(s)
+            return pitch.max(1)[1].view(1, 1), yaw.max(1)[1].view(1, 1)
    
     def optimize(self):
         if len(self.memory) < self.BATCH_SIZE:
@@ -111,20 +122,24 @@ class DQN:
                                                     if s is not None])
         
         state_batch = torch.cat(batch.state) #S
-        action_batch = torch.cat(batch.action) #A
+        yaw_action_batch = torch.cat(batch.yaw_action) #A
+        pitch_action_batch = torch.cat(batch.pitch_action) #A
         reward_batch = torch.cat(batch.reward) #R
 
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
-        td_estimate  = self.policy_net(state_batch).gather(1, action_batch)
-        
+        pitch, yaw  = self.policy_net(state_batch)
+        td_estimate_pitch = pitch.gather(1, pitch_action_batch)
+        td_estimate_yaw = yaw.gather(1, yaw_action_batch)
+
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based
         # on the "older" target_net; selecting their best reward with max(1)[0].
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
-        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
+        next_state_values_pitch = torch.zeros(self.BATCH_SIZE, device=self.device)
+        next_state_values_yaw = torch.zeros(self.BATCH_SIZE, device=self.device)
         with torch.no_grad():
             # #DQN
             # ns_pitch, ns_yaw = self.target_net(non_final_next_states)
@@ -132,18 +147,24 @@ class DQN:
             # next_state_values_yaw[non_final_mask] = ns_yaw.max(1)[0]
 
             #DDQN
-            ns_target = self.target_net(non_final_next_states)
-            ns_policy = self.policy_net(non_final_next_states)
-            best_action = torch.argmax(ns_policy, axis=1).unsqueeze(0).t()
+            ns_target_pitch, ns_target_yaw = self.target_net(non_final_next_states)
+            ns_policy_pitch, ns_policy_yaw = self.policy_net(non_final_next_states)
+            best_action_pitch = torch.argmax(ns_policy_pitch, axis=1).unsqueeze(0).t()
+            best_action_yaw = torch.argmax(ns_policy_yaw, axis=1).unsqueeze(0).t()
 
-            next_state_values[non_final_mask] = ns_target.gather(1, best_action).squeeze() #Qt(S_t+1, argmax_a Qp(S_t+1,a))
-
+            next_state_values_pitch[non_final_mask] = ns_target_pitch.gather(1, best_action_pitch).squeeze() #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+            next_state_values_yaw[non_final_mask] = ns_target_yaw.gather(1, best_action_yaw).squeeze() #Qt(S_t+1, argmax_a Qp(S_t+1,a))
+           
         # Compute the expected Q values
-        td_target = (next_state_values * self.GAMMA) + reward_batch  #R + gamma * target
+        td_target_pitch = (next_state_values_pitch * self.GAMMA) + reward_batch  #R + gamma * target
+        td_target_yaw = (next_state_values_yaw * self.GAMMA) + reward_batch  #R + gamma * target
 
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
-        loss = criterion(td_estimate, td_target.unsqueeze(1)) 
+        pitch_loss = criterion(td_estimate_pitch, td_target_pitch.unsqueeze(1)) 
+        yaw_loss = criterion(td_estimate_yaw, td_target_yaw.unsqueeze(1)) 
+
+        loss = pitch_loss + yaw_loss
         
         # Optimize the model
         self.optimizer.zero_grad()
