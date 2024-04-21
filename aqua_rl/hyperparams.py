@@ -60,10 +60,11 @@ pid_decay_start_ = 0
 pid_decay_end_ = 0
 
 #eval hyperparams
-eval_episode_ = -1
-eval_for_ = 10
+eval_episode_ = 580
+eval_experiment_number_ = 0.75
+eval_for_ = 5
 eval_duration_ = 1000
-
+eval_name_ = 'base'
 using_hardware_topics_ = False
 
 if using_hardware_topics_:

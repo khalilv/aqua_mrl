@@ -49,14 +49,13 @@ class diver_controller(Node):
         
         #flag to move diver
         self.move_diver = False
-
+        self.seed = 0
         timer_period = 5  # seconds
         self.timer = self.create_timer(timer_period, self.publish_diver_command)       
         print('Initialized: diver controller')
 
     def publish_diver_command(self):     
         if self.diver_pose is not None and self.move_diver:
-
             #scale vector to current magnitude
             self.diver_cmd.vx = np.random.uniform(hyperparams.speed_+0.175, hyperparams.speed_+0.275)
             self.diver_cmd.vy = np.random.uniform(-0.5,0.5)
@@ -84,6 +83,8 @@ class diver_controller(Node):
         if request.data:
             self.move_diver = True
             response.message = 'Diver controller started'
+            np.random.seed(self.seed)
+            self.seed = self.seed + 1
         else:
             self.move_diver = False
             self.reset_diver_req.pose = self.starting_pose
