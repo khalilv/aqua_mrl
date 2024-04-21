@@ -40,9 +40,13 @@ sigma_ = 0.5
 adv_x_action_space_ = 5
 adv_y_action_space_ = 5
 adv_z_action_space_ = 5
-adv_x_limit_ = 0.3
-adv_y_limit_ = 0.3
-adv_z_limit_ = 0.3
+adv_x_limit_ = 0.75
+adv_y_limit_ = 0.75
+adv_z_limit_ = 0.75
+#3 -> 0.3
+#4 -> 0.5
+#5 -> 0.0
+#6 -> 0.75
 
 #rarl hyperparams
 switch_every_ = 200
@@ -50,7 +54,7 @@ switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 3
+experiment_number_ = 6
 train_for_ = 10
 pid_decay_start_ = 0
 pid_decay_end_ = 0
