@@ -11,11 +11,10 @@ from time import sleep
 from aqua_rl.control.TwoHeadDQN import TwoHeadDQN
 from aqua_rl.helpers import reward_calculation, normalize_coords
 from aqua_rl import hyperparams
-from ir_aquasim_interfaces.srv import SetFloat
-
+from aqua2_interfaces.srv import SetFloat, SetInt
 
 class evaluation(Node):
-    def __init__(self, bouyancy):
+    def __init__(self, value):
         super().__init__('evaluation')
 
         #hyperparams
@@ -32,8 +31,9 @@ class evaluation(Node):
         self.empty_state_max = hyperparams.empty_state_max_
         self.switch_every = hyperparams.switch_every_
         self.eval_episode = hyperparams.eval_episode_
-        self.bouyancy_values = hyperparams.bouyancy_values_
-        self.bouyancy = bouyancy
+        self.values_to_test = hyperparams.values_to_test_
+        self.eval_prefix = hyperparams.eval_prefix_
+        self.current_value = value
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(UInt8MultiArray, hyperparams.autopilot_command_, self.queue_size)
@@ -46,8 +46,12 @@ class evaluation(Node):
             hyperparams.detection_topic_name_, 
             self.detection_callback, 
             self.queue_size)
-        self.bouyancy_client = self.create_client(SetFloat, hyperparams.bouyancy_srv_name_)
+        self.seed_client = self.create_client(SetInt, hyperparams.diver_seed_srv_name_)
 
+        if self.eval_prefix == 'bouyancy':
+            self.value_client = self.create_client(SetFloat, hyperparams.bouyancy_srv_name_)
+        elif self.eval_prefix == 'speed':
+            self.value_client = self.create_client(SetFloat, hyperparams.diver_speed_srv_name_)
 
         #flush queues
         self.flush_steps = self.queue_size + 35
@@ -67,7 +71,7 @@ class evaluation(Node):
         self.yaw_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)  
         self.stop_episode = self.eval_for - 1
 
-        self.weight_path = 'src/aqua_rl/experiments/{}/episode_{}.pt'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
+        self.weight_path = 'src/aqua_rl/experiments/{}/weights/episode_{}.pt'.format(str(self.experiment_number), str(self.eval_episode).zfill(5))
         checkpoint = torch.load(self.weight_path, map_location=self.dqn.device)
         self.dqn.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
         self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
@@ -79,7 +83,7 @@ class evaluation(Node):
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
 
-        self.save_path = os.path.join(self.save_path, 'bouyancy{}'.format(str(self.bouyancy)))
+        self.save_path = os.path.join(self.save_path, '{}_{}'.format(str(self.eval_prefix), str(self.current_value)))
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
         
@@ -95,10 +99,15 @@ class evaluation(Node):
         self.diver_start_stop_req = SetBool.Request()
         self.diver_start_stop_req.data = False
 
-        #diver start stop service data
-        self.bouancy_called = False
-        self.bouyancy_req = SetFloat.Request()
-        self.bouyancy_req.value = self.bouyancy
+        #value service data
+        self.value_service_called = False
+        self.value_req = SetFloat.Request()
+        self.value_req.value = self.current_value
+
+        #seed service data
+        self.seed_called = False
+        self.seed_req = SetInt.Request()
+        self.seed_req.value = self.episode
 
         #current start stop service data
         self.current_start_stop_req = SetBool.Request()
@@ -130,11 +139,22 @@ class evaluation(Node):
             self.diver_start_stop_req.data = True
             self.diver_start_stop_client.call_async(self.diver_start_stop_req)
         
-        if not self.bouancy_called:
-            print('Setting bouyancy: {}'.format(self.bouyancy))
-            self.bouyancy_req.value = self.bouyancy
-            self.bouyancy_client.call_async(self.bouyancy_req)
-            self.bouancy_called = True
+        if not self.value_service_called:
+            if self.eval_prefix == 'bouyancy':
+                print('Setting bouyancy: {}'.format(self.current_value))
+                self.value_req.value = self.current_value
+                self.value_client.call_async(self.value_req)
+            elif self.eval_prefix == 'speed':
+                print('Setting speed: {}'.format(self.current_value))
+                self.value_req.value = self.current_value
+                self.value_client.call_async(self.value_req)
+            self.value_service_called = True
+
+        if not self.seed_called:
+            print('Setting seed: {}'.format(self.episode))
+            self.seed_req.value = self.episode
+            self.seed_client.call_async(self.seed_req)
+            self.seed_called = True
 
         if not self.current_start_stop_req.data:
             print('Starting current controller')
@@ -213,9 +233,9 @@ class evaluation(Node):
 
         if self.episode < self.stop_episode:
             self.reset()
-        elif self.bouyancy != self.bouyancy_values[-1]:
-            current_idx = self.bouyancy_values.index(self.bouyancy)
-            next_value = self.bouyancy_values[current_idx + 1]
+        elif self.current_value != self.values_to_test[-1]:
+            current_idx = self.values_to_test.index(self.current_value)
+            next_value = self.values_to_test[current_idx + 1]
             subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/eval_resetter.py {}'.format(next_value), shell=True)
             self.popen_called = True
         else:
@@ -239,10 +259,18 @@ class evaluation(Node):
         print('Stopping current controller')
         self.current_start_stop_req.data = False
         self.current_start_stop_client.call_async(self.current_start_stop_req)
-        print('Resetting bouyancy')
-        self.bouyancy_req.value = 1.0
-        self.bouyancy_client.call_async(self.bouyancy_req)
-        self.bouancy_called = False
+        if self.eval_prefix == 'bouyancy':
+            print('Resetting bouyancy')
+            self.value_req.value = 1.0
+            self.value_client.call_async(self.value_req)
+            self.value_service_called = False
+        elif self.eval_prefix == 'speed':
+            print('Resetting max speed')
+            self.value_req.value = hyperparams.diver_max_speed_
+            self.value_client.call_async(self.value_req)
+            self.value_service_called = False
+        print('Resetting seed')
+        self.seed_called = False
         sleep(5)
 
         #reset state and history queues
@@ -271,11 +299,11 @@ class evaluation(Node):
     
 def main(args=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--bouyancy', type=float, required=True)
+    parser.add_argument('--value', type=float, required=True)
     args = parser.parse_args(args)
 
     rclpy.init(args=None)
-    node = evaluation(args.bouyancy)
+    node = evaluation(args.value)
 
     rclpy.spin(node)
 

@@ -40,30 +40,33 @@ sigma_ = 0.5
 adv_x_action_space_ = 5
 adv_y_action_space_ = 5
 adv_z_action_space_ = 5
-adv_x_limit_ = 0.75
-adv_y_limit_ = 0.75
-adv_z_limit_ = 0.75
+adv_x_limit_ = 2.0
+adv_y_limit_ = 2.0
+adv_z_limit_ = 2.0
 #3 -> 0.3
 #4 -> 0.5
 #5 -> 0.0
 #6 -> 0.75
+#7 -> 1.0
+#8 -> 2.0
 
 #rarl hyperparams
-switch_every_ = 200
+switch_every_ = 100
 switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 6
+experiment_number_ = 8
 train_for_ = 10
 pid_decay_start_ = 0
 pid_decay_end_ = 0
 
 #eval hyperparams
-bouyancy_values_ = [0.95, 0.96, 0.97, 0.98, 0.99, 1.01, 1.02, 1.03, 1.04, 1.05]
-eval_episode_ = 580
-eval_experiment_number_ = 0.75
-eval_for_ = 5
+values_to_test_ = [0.95, 0.96, 0.97, 0.98, 0.99, 1.01, 1.02, 1.03, 1.04, 1.05]
+eval_prefix_ = 'bouyancy'
+eval_episode_ = 500
+eval_experiment_number_ = 8
+eval_for_ = 10
 eval_duration_ = 1000
 using_hardware_topics_ = False
 
@@ -91,5 +94,8 @@ else:
     adv_unity_topic_name_ = '/adv/current'
     adv_command_topic_name_ = '/adv/command'
     adv_start_stop_ = '/adv/start_stop'
-    bouyancy_srv_name_ = '/bouyancy'
+    bouyancy_srv_name_ = '/set_bouyancy'
+    diver_seed_srv_name_ = '/diver/set_seed'
+    diver_speed_srv_name_ = '/diver/set_speed'
+
     speed_ = 0.25

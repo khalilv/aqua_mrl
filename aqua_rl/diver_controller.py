@@ -2,6 +2,7 @@ import rclpy
 import numpy as np
 from rclpy.node import Node
 from aqua2_interfaces.msg import DiverCommand, AquaPose
+from aqua2_interfaces.srv import SetInt, SetFloat
 from aqua_rl import hyperparams
 from std_srvs.srv import SetBool
 from ir_aquasim_interfaces.srv import SetPosition
@@ -28,6 +29,14 @@ class diver_controller(Node):
             SetBool,
             hyperparams.diver_start_stop_,
             self.start_stop_callback)
+        self.seed_service = self.create_service(
+            SetInt,
+            hyperparams.diver_seed_srv_name_,
+            self.seed_callback)
+        self.speed_service = self.create_service(
+            SetFloat,
+            hyperparams.diver_speed_srv_name_,
+            self.speed_callback)
         self.reset_diver_client = self.create_client(SetPosition, hyperparams.diver_reset_srv_name_)
 
         #command
@@ -49,7 +58,6 @@ class diver_controller(Node):
         
         #flag to move diver
         self.move_diver = False
-        self.seed = 0
         timer_period = 5  # seconds
         self.timer = self.create_timer(timer_period, self.publish_diver_command)       
         print('Initialized: diver controller')
@@ -83,14 +91,24 @@ class diver_controller(Node):
         if request.data:
             self.move_diver = True
             response.message = 'Diver controller started'
-            np.random.seed(self.seed)
-            self.seed = self.seed + 1
         else:
             self.move_diver = False
             self.reset_diver_req.pose = self.starting_pose
             self.reset_diver_client.call_async(self.reset_diver_req)
             response.message = 'Diver controller stopped and reset'
         response.success = True
+        return response
+    
+    def seed_callback(self, request, response):
+        print('Setting seed to {}'.format(int(request.value)))
+        np.random.seed(int(request.value))
+        response.msg = 'Set seed successfully'
+        return response
+    
+    def speed_callback(self, request, response):
+        print('Setting max seed to {}'.format(int(request.value)))
+        self.max_speed = request.value
+        response.msg = 'Set speed successfully'
         return response
     
 def main(args=None):

@@ -3,8 +3,8 @@ import subprocess
 import time
 import sys
 
-bouyancy = sys.argv[1]
-bouyancy = float(bouyancy)
+value = sys.argv[1]
+value = float(value)
 
 # This includes a set of steps to take to make sure that we reset almost everything in the simulator
 # Starting with the nodes, we have to kill the nodes
@@ -56,4 +56,4 @@ subprocess.run('ros2 service call /a13/system/set_mode aqua2_interfaces/srv/SetS
 
 time.sleep(5)
 print('Running the evaluation..')
-subprocess.Popen('ros2 run aqua_rl evaluation --bouyancy {}'.format(bouyancy), shell=True)
+subprocess.Popen('ros2 run aqua_rl evaluation --value {}'.format(value), shell=True)
