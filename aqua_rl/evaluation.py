@@ -2,6 +2,8 @@ import rclpy
 import torch
 import numpy as np 
 import os
+import argparse
+import subprocess
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, UInt8MultiArray
 from std_srvs.srv import SetBool
@@ -9,9 +11,11 @@ from time import sleep
 from aqua_rl.control.TwoHeadDQN import TwoHeadDQN
 from aqua_rl.helpers import reward_calculation, normalize_coords
 from aqua_rl import hyperparams
+from ir_aquasim_interfaces.srv import SetFloat
+
 
 class evaluation(Node):
-    def __init__(self):
+    def __init__(self, bouyancy):
         super().__init__('evaluation')
 
         #hyperparams
@@ -28,7 +32,8 @@ class evaluation(Node):
         self.empty_state_max = hyperparams.empty_state_max_
         self.switch_every = hyperparams.switch_every_
         self.eval_episode = hyperparams.eval_episode_
-        self.eval_name = hyperparams.eval_name_
+        self.bouyancy_values = hyperparams.bouyancy_values_
+        self.bouyancy = bouyancy
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(UInt8MultiArray, hyperparams.autopilot_command_, self.queue_size)
@@ -41,6 +46,8 @@ class evaluation(Node):
             hyperparams.detection_topic_name_, 
             self.detection_callback, 
             self.queue_size)
+        self.bouyancy_client = self.create_client(SetFloat, hyperparams.bouyancy_srv_name_)
+
 
         #flush queues
         self.flush_steps = self.queue_size + 35
@@ -66,14 +73,16 @@ class evaluation(Node):
         self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
         self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.dqn.steps_done = checkpoint['training_steps']
+        print('DQN loaded. Steps completed: {}'.format(self.dqn.steps_done))
         
         self.save_path = 'src/aqua_rl/evaluations/{}/'.format(str(self.experiment_number))
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
 
-        self.save_path = os.path.join(self.save_path, self.eval_name)
+        self.save_path = os.path.join(self.save_path, 'bouyancy{}'.format(str(self.bouyancy)))
         if not os.path.exists(self.save_path):
             os.mkdir(self.save_path)
+        
         #autopilot commands
         self.command = UInt8MultiArray()
         self.adversary_command = UInt8MultiArray()
@@ -86,6 +95,11 @@ class evaluation(Node):
         self.diver_start_stop_req = SetBool.Request()
         self.diver_start_stop_req.data = False
 
+        #diver start stop service data
+        self.bouancy_called = False
+        self.bouyancy_req = SetFloat.Request()
+        self.bouyancy_req.value = self.bouyancy
+
         #current start stop service data
         self.current_start_stop_req = SetBool.Request()
         self.current_start_stop_req.data = False
@@ -93,8 +107,10 @@ class evaluation(Node):
         #duration counting
         self.duration = 0
         self.empty_state_counter = 0
+        
+        self.popen_called = False
 
-        print('Initialized: dqn controller')
+        print('Initialized: evaluation')
     
 
     def detection_callback(self, coords):
@@ -113,6 +129,12 @@ class evaluation(Node):
             print('Starting diver controller')
             self.diver_start_stop_req.data = True
             self.diver_start_stop_client.call_async(self.diver_start_stop_req)
+        
+        if not self.bouancy_called:
+            print('Setting bouyancy: {}'.format(self.bouyancy))
+            self.bouyancy_req.value = self.bouyancy
+            self.bouyancy_client.call_async(self.bouyancy_req)
+            self.bouancy_called = True
 
         if not self.current_start_stop_req.data:
             print('Starting current controller')
@@ -178,6 +200,9 @@ class evaluation(Node):
     
     def finish(self):
          
+        if self.popen_called:
+            return 
+        
         self.episode_rewards = np.array(self.episode_rewards)
         mean_rewards = np.mean(self.episode_rewards)
         sum_rewards = np.sum(self.episode_rewards)
@@ -188,6 +213,11 @@ class evaluation(Node):
 
         if self.episode < self.stop_episode:
             self.reset()
+        elif self.bouyancy != self.bouyancy_values[-1]:
+            current_idx = self.bouyancy_values.index(self.bouyancy)
+            next_value = self.bouyancy_values[current_idx + 1]
+            subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/eval_resetter.py {}'.format(next_value), shell=True)
+            self.popen_called = True
         else:
             self.reset()
             rclpy.shutdown()
@@ -209,6 +239,10 @@ class evaluation(Node):
         print('Stopping current controller')
         self.current_start_stop_req.data = False
         self.current_start_stop_client.call_async(self.current_start_stop_req)
+        print('Resetting bouyancy')
+        self.bouyancy_req.value = 1.0
+        self.bouyancy_client.call_async(self.bouyancy_req)
+        self.bouancy_called = False
         sleep(5)
 
         #reset state and history queues
@@ -227,6 +261,7 @@ class evaluation(Node):
         #reset end conditions 
         self.finished = False
         self.complete = False
+
         print('-------------- Completed Reset --------------')
         return
     
@@ -235,9 +270,12 @@ class evaluation(Node):
     #     return index
     
 def main(args=None):
-    rclpy.init(args=args)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--bouyancy', type=float, required=True)
+    args = parser.parse_args(args)
 
-    node = evaluation()
+    rclpy.init(args=None)
+    node = evaluation(args.bouyancy)
 
     rclpy.spin(node)
 
