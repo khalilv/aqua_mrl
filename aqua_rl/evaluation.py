@@ -52,6 +52,10 @@ class evaluation(Node):
             self.value_client = self.create_client(SetFloat, hyperparams.bouyancy_srv_name_)
         elif self.eval_prefix == 'speed':
             self.value_client = self.create_client(SetFloat, hyperparams.diver_speed_srv_name_)
+        elif self.eval_prefix == 'pitch':
+            self.value_client = self.create_client(SetFloat, hyperparams.autopilot_pitch_limit_name_)
+        elif self.eval_prefix == 'yaw':
+            self.value_client = self.create_client(SetFloat, hyperparams.autopilot_yaw_limit_name_)
 
         #flush queues
         self.flush_steps = self.queue_size + 35
@@ -146,6 +150,14 @@ class evaluation(Node):
                 self.value_client.call_async(self.value_req)
             elif self.eval_prefix == 'speed':
                 print('Setting speed: {}'.format(self.current_value))
+                self.value_req.value = self.current_value
+                self.value_client.call_async(self.value_req)
+            elif self.eval_prefix == 'pitch':
+                print('Setting pitch limit to: {}'.format(self.current_value))
+                self.value_req.value = self.current_value
+                self.value_client.call_async(self.value_req)
+            elif self.eval_prefix == 'yaw':
+                print('Setting yaw limit to: {}'.format(self.current_value))
                 self.value_req.value = self.current_value
                 self.value_client.call_async(self.value_req)
             self.value_service_called = True
@@ -261,7 +273,7 @@ class evaluation(Node):
         self.current_start_stop_client.call_async(self.current_start_stop_req)
         if self.eval_prefix == 'bouyancy':
             print('Resetting bouyancy')
-            self.value_req.value = 1.0
+            self.value_req.value = 997.7
             self.value_client.call_async(self.value_req)
             self.value_service_called = False
         elif self.eval_prefix == 'speed':
@@ -269,6 +281,17 @@ class evaluation(Node):
             self.value_req.value = hyperparams.diver_max_speed_
             self.value_client.call_async(self.value_req)
             self.value_service_called = False
+        elif self.eval_prefix == 'pitch':
+            print('Resetting pitch limit')
+            self.value_req.value = hyperparams.pitch_limit_
+            self.value_client.call_async(self.value_req)
+            self.value_service_called = False
+        elif self.eval_prefix == 'yaw':
+            print('Resetting yaw limit')
+            self.value_req.value = hyperparams.yaw_limit_
+            self.value_client.call_async(self.value_req)
+            self.value_service_called = False
+
         print('Resetting seed')
         self.seed_called = False
         sleep(5)

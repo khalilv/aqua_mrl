@@ -51,7 +51,7 @@ adv_z_limit_ = 2.0
 #8 -> 2.0
 
 #rarl hyperparams
-switch_every_ = 100
+switch_every_ = 200
 switch_every_adv_ = 100
 
 #training hyperparams
@@ -62,11 +62,11 @@ pid_decay_start_ = 0
 pid_decay_end_ = 0
 
 #eval hyperparams
-values_to_test_ = [0.95, 0.96, 0.97, 0.98, 0.99, 1.01, 1.02, 1.03, 1.04, 1.05]
+values_to_test_ = [1750,1500,1250,1000,850]
 eval_prefix_ = 'bouyancy'
-eval_episode_ = 500
+eval_episode_ = 700
 eval_experiment_number_ = 8
-eval_for_ = 10
+eval_for_ = 5
 eval_duration_ = 1000
 using_hardware_topics_ = False
 
@@ -97,5 +97,6 @@ else:
     bouyancy_srv_name_ = '/set_bouyancy'
     diver_seed_srv_name_ = '/diver/set_seed'
     diver_speed_srv_name_ = '/diver/set_speed'
-
+    autopilot_yaw_limit_name_ = '/autopilot/set_yaw_limit'
+    autopilot_pitch_limit_name_ = '/autopilot/set_pitch_limit'
     speed_ = 0.25

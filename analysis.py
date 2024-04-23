@@ -79,12 +79,16 @@ def interdependency_study(dir, pitch_change):
     plt.show()
     return
 
-def bouyancy_analysis(experiments):
-    for exp in experiments:
+def density_analysis(experiments, names):
+    colors = ['green', 'blue']
+    ecolors = ['lightgreen', 'lightblue']
+    for c, exp in enumerate(experiments):
         return_mean =[]
         return_std = []
-        for b in hyperparams.values_to_test_:
-            directory = '/usr/local/data/kvirji/AQUA/aqua_rl/evaluations/{}/bouyancy_{}/'.format(str(exp), str(b))
+        x = []
+        values_to_test =  [3000.0,2500.0,2250.0,2000.0,1750.0,1500.0,1250.0,1000.0,850.0]
+        for s in values_to_test:
+            directory = '/usr/local/data/kvirji/AQUA/aqua_rl/evaluations/{}/bouyancy_{}/'.format(str(exp), str(s))
             if os.path.exists(directory):
                 results = []
                 for file in os.listdir(directory):
@@ -93,7 +97,63 @@ def bouyancy_analysis(experiments):
                         results.append(np.sum(r))
                 return_mean.append(np.mean(results))
                 return_std.append(np.std(results))
-        print(return_mean, return_std)
+                x.append(s)
+        plt.plot(x, return_mean, linestyle='-', color=colors[c], label=names[c])
+        plt.fill_between(x, np.subtract(return_mean, return_std), np.add(return_mean, return_std), color = ecolors[c])
+    plt.xlabel('Water density')
+    plt.ylabel('Duration')
+    plt.axvline(x=997.7, color='k', linestyle='--', label='Training density') 
+    plt.legend()
+    plt.show()
+
+def speed_analysis(experiments):
+    for exp in experiments:
+        return_mean =[]
+        return_std = []
+        x = []
+        values_to_test =  [0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 1.0, 1.1, 1.2, 1.3]
+        for s in values_to_test:
+            directory = '/usr/local/data/kvirji/AQUA/aqua_rl/evaluations/{}/speed_{}/'.format(str(exp), str(s))
+            if os.path.exists(directory):
+                results = []
+                for file in os.listdir(directory):
+                    with open(os.path.join(directory, file), 'rb') as f:
+                        r = np.load(f)
+                        results.append(np.sum(r))
+                return_mean.append(np.mean(results))
+                return_std.append(np.std(results))
+                x.append(s)
+        plt.errorbar(x, return_mean, yerr=return_std, label=str(exp))
+    plt.legend()
+    plt.show()
+
+def pitch_analysis(experiments, names):
+    colors = ['green', 'blue']
+    ecolors = ['lightgreen', 'lightblue']
+    for c, exp in enumerate(experiments):
+        return_mean =[]
+        return_std = []
+        x = []
+        values_to_test =  [0.0025, 0.005, 0.0075, 0.0085, 0.015, 0.025, 0.065, 0.075, 0.085, 0.09, 0.1]
+        for s in values_to_test:
+            directory = '/usr/local/data/kvirji/AQUA/aqua_rl/evaluations/{}/pitch_{}/'.format(str(exp), str(s))
+            if os.path.exists(directory):
+                results = []
+                for file in os.listdir(directory):
+                    with open(os.path.join(directory, file), 'rb') as f:
+                        r = np.load(f)
+                        results.append(len(r))
+                return_mean.append(np.mean(results))
+                return_std.append(np.std(results))
+                x.append(s)
+        plt.plot(x, return_mean, linestyle='-', color=colors[c], label=names[c])
+        plt.fill_between(x, np.subtract(return_mean, return_std), np.add(return_mean, return_std), color = ecolors[c])
+    plt.xlabel('Pitch limit')
+    plt.ylabel('Total reward')
+    plt.axvline(x=0.05, color='k', linestyle='--', label='Training limit') 
+    plt.legend()
+    plt.show()
+
 
 def episodic_returns(experiments):
     for exp in experiments:
@@ -128,5 +188,5 @@ def episodic_returns(experiments):
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/pitch_change', True)
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/yaw_change', False)
 
-bouyancy_analysis([5,8])
-episodic_returns([5,8])
+density_analysis([5,8], ['Baseline','RARL'])
+# episodic_returns([5,8])

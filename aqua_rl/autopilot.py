@@ -8,6 +8,7 @@ from std_msgs.msg import UInt8MultiArray
 from std_srvs.srv import SetBool
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
+from aqua2_interfaces.srv import SetFloat
 from time import sleep
 
 class autopilot(Node):
@@ -36,7 +37,15 @@ class autopilot(Node):
             hyperparams.autopilot_start_stop_,
             self.start_stop_callback)
         self.reset_client = self.create_client(SetPosition, hyperparams.aqua_reset_srv_name_)
-
+        self.yaw_limit_service = self.create_service(
+            SetFloat,
+            hyperparams.autopilot_yaw_limit_name_,
+            self.set_yaw_limit)
+        self.pitch_limit_service = self.create_service(
+            SetFloat,
+            hyperparams.autopilot_pitch_limit_name_,
+            self.set_pitch_limit)
+        
         self.measured_roll_angle = None
         self.measured_pitch_angle = None
         self.measured_yaw_angle = None
@@ -141,6 +150,21 @@ class autopilot(Node):
     
     def calculate_yaw(self, imu):
         return imu.yaw
+    
+    def set_yaw_limit(self, request, response):
+        print('Setting yaw limit to {}'.format(request.value))
+        self.yaw_limit = request.value
+        self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)        
+        response.msg = 'Set yaw limit successfully'
+        return response
+    
+    def set_pitch_limit(self, request, response):
+        print('Setting pitch limit to {}'.format(request.value))
+        self.pitch_limit = request.value
+        self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
+        response.msg = 'Set pitch limit successfully'
+        return response
+
 
 def main(args=None):
     rclpy.init(args=args)

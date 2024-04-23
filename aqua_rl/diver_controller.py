@@ -66,13 +66,12 @@ class diver_controller(Node):
         if self.diver_pose is not None and self.move_diver:
             #scale vector to current magnitude
             self.diver_cmd.vx = np.random.uniform(hyperparams.speed_+0.175, hyperparams.speed_+0.275)
-            self.diver_cmd.vy = np.random.uniform(-0.5,0.5)
-            self.diver_cmd.vz = np.random.uniform(-0.5,0.5)
+            self.diver_cmd.vy = np.random.uniform(-1.0,1.0)
+            self.diver_cmd.vz = np.random.uniform(-1.0,1.0)
 
-            speed = np.sqrt(np.square(self.diver_cmd.vy) + np.square(self.diver_cmd.vz))
-            if speed > self.max_speed:
-                self.diver_cmd.vy = self.diver_cmd.vy * self.max_speed/speed
-                self.diver_cmd.vz = self.diver_cmd.vz * self.max_speed/speed
+            speed = np.sqrt(np.square(self.diver_cmd.vy) + np.square(self.diver_cmd.vz)) 
+            self.diver_cmd.vy = self.diver_cmd.vy * self.max_speed/speed
+            self.diver_cmd.vz = self.diver_cmd.vz * self.max_speed/speed
                 
             if self.diver_pose[1] > self.depth_range[0] and self.diver_cmd.vy > 0:
                 self.diver_cmd.vy *= -1
@@ -106,7 +105,7 @@ class diver_controller(Node):
         return response
     
     def speed_callback(self, request, response):
-        print('Setting max seed to {}'.format(int(request.value)))
+        print('Setting max speed to {}'.format(request.value))
         self.max_speed = request.value
         response.msg = 'Set speed successfully'
         return response
