@@ -140,7 +140,7 @@ class autopilot(Node):
                 self.command.yaw = 0.0
                 self.command.roll = 0.0
                 self.command.heave = 0.0
-                self.command.speed = 0.25
+                self.command.speed = self.min_speed
                 self.command_publisher.publish(self.command)
             sleep(2.5)
             self.reset_req.pose = self.starting_pose

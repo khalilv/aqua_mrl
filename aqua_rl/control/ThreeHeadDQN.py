@@ -80,13 +80,13 @@ class ThreeHeadDQN:
 
     def __init__(self, n_action1, n_action2, n_action3, history_size) -> None:
         self.BATCH_SIZE = 128
-        self.GAMMA = 0.9
+        self.GAMMA = 0.99
         self.EPS_START = 0.9
         self.EPS_END = 0.1
         self.EPS_DECAY = 100000
         self.TAU = 0.0025
         LR = 1e-4
-        self.MEMORY_SIZE = 20000
+        self.MEMORY_SIZE = 25000
         self.n_action1 = n_action1
         self.n_action2 = n_action2
         self.n_action3 = n_action3

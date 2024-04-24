@@ -244,7 +244,7 @@ class dqn_controller(Node):
         sum_rewards = np.sum(self.episode_rewards)
         print('Episode rewards. Average: ', mean_rewards, ' Sum: ', sum_rewards)
         
-        if self.evaluate:
+        if self.episode == self.stop_episode:
             self.writer.add_scalar('Episode Rewards (Eval)', sum_rewards, self.dqn.steps_done)
             self.writer.add_scalar('Duration (Eval)', self.duration, self.dqn.steps_done)
         else:
