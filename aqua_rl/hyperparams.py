@@ -15,17 +15,22 @@ if use_autopilot_:
     yaw_limit_ = 25
     pitch_gains_ = [3.5, 0.0, 1.0] #P,I,D
     yaw_gains_ = [3.5, 0.0, 1.0] #P,I,D
+    max_speed_ = 0.75
+    min_speed_= 0.1
 else:
     #raw command
     pitch_limit_ = 0.05
     yaw_limit_ = 0.5
+    max_speed_ = 0.75
+    min_speed_= 0.1
     pitch_gains_ = [0.05, 0.0, 0.1] #P,I,D
     yaw_gains_ = [0.25, 0.0, 0.5] #P,I,D
 
 #dqn hyperparams
-history_size_ = 10
+history_size_ = 20
 yaw_action_space_ = 5
 pitch_action_space_ = 5
+speed_action_space_ = 5
 frame_skip_ = 1
 
 #end of episode hyperparams
@@ -34,7 +39,9 @@ depth_range_ = [-6, -12]
 train_duration_ = 1000
 
 #reward hyperparams
-sigma_ = 0.5
+location_sigma_ = 0.5
+area_sigma_ = 0.05
+target_area_ = 0.025
 
 #adversary hyperparams
 adv_x_action_space_ = 5
@@ -75,7 +82,6 @@ if using_hardware_topics_:
     imu_topic_name_ = '/ramius/imu/filtered_data'
     depth_topic_name_ = '/ramius/depth'
     camera_topic_name_ = '/ramius/camera/left/image_raw/compressed'
-    speed_ = 0.6
 else:
     command_topic_name_ = '/a13/command'
     imu_topic_name_ = '/aqua/pose'
@@ -99,4 +105,3 @@ else:
     diver_speed_srv_name_ = '/diver/set_speed'
     autopilot_yaw_limit_name_ = '/autopilot/set_yaw_limit'
     autopilot_pitch_limit_name_ = '/autopilot/set_pitch_limit'
-    speed_ = 0.25

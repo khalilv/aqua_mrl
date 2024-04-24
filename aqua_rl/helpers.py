@@ -56,10 +56,12 @@ def euler_from_quaternion(quaternion):
 
     return roll, pitch, yaw
 
-def reward_calculation(yn, xn, detected, sigma):
+def reward_calculation(yn, xn, a, detected, location_sigma, area_sigma, target_area):
     if detected == 1.0:
         distance = np.sqrt(xn**2 + yn**2) #distance from the origin
-        reward = np.exp(-distance**2 / (2 * sigma**2)) #reward based on 2D Gaussian distribution
+        location_reward = np.exp(-distance**2 / (2 * location_sigma**2)) #reward based on 2D Gaussian distribution
+        area_reward = np.exp(-(a-target_area)**2 / (2 * area_sigma**2)) #reward based on 2D Gaussian distribution
+        reward = location_reward*area_reward
         reward = np.clip(reward, 0, 1) #clip reward to range [0, 1]
     else:
         reward = -1.0

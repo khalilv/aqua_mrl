@@ -16,7 +16,8 @@ class autopilot(Node):
         super().__init__('autopilot')
         self.queue_size = hyperparams.queue_size_
         self.use_autopilot = hyperparams.use_autopilot_
-        self.speed = hyperparams.speed_
+        self.max_speed = hyperparams.max_speed_
+        self.min_speed = hyperparams.min_speed_
         self.roll_gains = hyperparams.autopilot_roll_gains_
         self.pitch_gains = hyperparams.autopilot_pitch_gains_
         self.yaw_gains = hyperparams.autopilot_yaw_gains_
@@ -24,6 +25,7 @@ class autopilot(Node):
         self.yaw_limit = hyperparams.yaw_limit_
         self.pitch_action_space = hyperparams.pitch_action_space_
         self.yaw_action_space = hyperparams.yaw_action_space_
+        self.speed_action_space = hyperparams.speed_action_space_
 
         self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
         self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
@@ -52,6 +54,7 @@ class autopilot(Node):
         
         self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
         self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
+        self.speed_actions = np.linspace(self.min_speed, self.max_speed, self.speed_action_space)
 
         self.roll_target = 0.0
         self.pitch_target = 0.0
@@ -66,12 +69,13 @@ class autopilot(Node):
         self.command.yaw = 0.0
         self.command.roll = 0.0
         self.command.heave = 0.0
-        self.command.speed = self.speed
+        self.command.speed = 0.0
 
         self.publish_actions = False
 
         self.pitch_action_to_execute = None
         self.yaw_action_to_execute = None
+        self.speed_action_to_execute = None
 
         self.reset_req = SetPosition.Request()
         #aqua starting position and orientation 
@@ -93,13 +97,13 @@ class autopilot(Node):
         
         if self.publish_actions:
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-            self.command.speed = self.speed
             if self.use_autopilot:
                 self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
                 self.command.yaw = self.yaw_pid.control(self.measured_yaw_angle)
             else:
                 self.command.pitch = self.pitch_action_to_execute
                 self.command.yaw = self.yaw_action_to_execute
+                self.command.speed = self.speed_action_to_execute
             self.command_publisher.publish(self.command)
         
         return
@@ -108,12 +112,14 @@ class autopilot(Node):
         actions = np.array(a.data)
         pitch_action = self.pitch_actions[int(actions[0])]
         yaw_action = self.yaw_actions[int(actions[1])]
+        speed_action = self.speed_actions[int(actions[2])]
         if self.use_autopilot:
             self.pitch_pid.target = self.measured_pitch_angle + pitch_action
             self.yaw_pid.target = self.measured_yaw_angle + yaw_action
         else:
             self.pitch_action_to_execute = pitch_action
             self.yaw_action_to_execute = yaw_action
+            self.speed_action_to_execute = speed_action
         return
 
     def start_stop_callback(self, request, response):
@@ -125,6 +131,7 @@ class autopilot(Node):
             else:
                 self.pitch_action_to_execute = 0.0
                 self.yaw_action_to_execute = 0.0
+                self.speed_action_to_execute = 0.0
             response.message = 'Autopilot started'
         else:
             self.publish_actions = False
@@ -133,7 +140,7 @@ class autopilot(Node):
                 self.command.yaw = 0.0
                 self.command.roll = 0.0
                 self.command.heave = 0.0
-                self.command.speed = self.speed
+                self.command.speed = 0.25
                 self.command_publisher.publish(self.command)
             sleep(2.5)
             self.reset_req.pose = self.starting_pose

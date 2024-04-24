@@ -7,8 +7,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, UInt8MultiArray
 from std_srvs.srv import SetBool
 from time import sleep, time
-from aqua_rl.control.TwoHeadDQN import TwoHeadDQN, TwoHeadReplayMemory
-from aqua_rl.control.ThreeHeadDQN import ThreeHeadDQN
+from aqua_rl.control.ThreeHeadDQN import ThreeHeadDQN, ThreeHeadReplayMemory
 from aqua_rl.helpers import reward_calculation, normalize_coords
 from aqua_rl import hyperparams
 from torch.utils.tensorboard import SummaryWriter 
@@ -22,25 +21,22 @@ class dqn_controller(Node):
         self.history_size = hyperparams.history_size_
         self.yaw_action_space = hyperparams.yaw_action_space_
         self.pitch_action_space = hyperparams.pitch_action_space_
+        self.speed_action_space = hyperparams.speed_action_space_
         self.img_size = hyperparams.img_size_
         self.load_erm = hyperparams.load_erm_ 
         self.experiment_number = hyperparams.experiment_number_
         self.train_for = hyperparams.train_for_
         self.train_duration = hyperparams.train_duration_
-        self.reward_sigma = hyperparams.sigma_
+        self.location_sigma = hyperparams.location_sigma_
+        self.area_sigma = hyperparams.area_sigma_
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_
-        self.adversary_x_action_space = hyperparams.adv_x_action_space_
-        self.adversary_y_action_space = hyperparams.adv_y_action_space_
-        self.adversary_z_action_space = hyperparams.adv_z_action_space_
-        self.switch_every = hyperparams.switch_every_
+        self.target_area = hyperparams.target_area_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(UInt8MultiArray, hyperparams.autopilot_command_, self.queue_size)
-        self.current_publisher = self.create_publisher(UInt8MultiArray, hyperparams.adv_command_topic_name_, self.queue_size)
         self.autopilot_start_stop_client = self.create_client(SetBool, hyperparams.autopilot_start_stop_)
         self.diver_start_stop_client = self.create_client(SetBool, hyperparams.diver_start_stop_)
-        self.current_start_stop_client = self.create_client(SetBool, hyperparams.adv_start_stop_)
         self.detection_subscriber = self.create_subscription(
             Float32MultiArray, 
             hyperparams.detection_topic_name_, 
@@ -63,21 +59,18 @@ class dqn_controller(Node):
         self.evaluate = False 
 
         #dqn controller for yaw and pitch 
-        self.dqn = TwoHeadDQN(self.pitch_action_space, self.yaw_action_space, self.history_size) 
+        self.dqn = ThreeHeadDQN(self.pitch_action_space, self.yaw_action_space, self.speed_action_space, self.history_size) 
         self.state = None
         self.next_state = None
         self.reward = None
         self.pitch_action =  torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)   
         self.yaw_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)    
+        self.speed_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)    
+
         self.action_history = []
         self.history = []
         self.episode_rewards = []
-        self.erm = TwoHeadReplayMemory(self.dqn.MEMORY_SIZE)
-
-        self.adv = ThreeHeadDQN(self.adversary_x_action_space, self.adversary_y_action_space, self.adversary_z_action_space, self.history_size)
-        self.adv_action_x = torch.tensor([[2]], device=self.adv.device, dtype=torch.long)   
-        self.adv_action_y = torch.tensor([[2]], device=self.adv.device, dtype=torch.long)   
-        self.adv_action_z = torch.tensor([[2]], device=self.adv.device, dtype=torch.long)  
+        self.erm = ThreeHeadReplayMemory(self.dqn.MEMORY_SIZE) 
 
         self.root_path = 'src/aqua_rl/experiments/{}'.format(str(self.experiment_number))
         if os.path.exists(self.root_path):
@@ -91,15 +84,6 @@ class dqn_controller(Node):
             self.dqn.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
             self.dqn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.dqn.steps_done = checkpoint['training_steps']
-            
-            self.adv_save_path = os.path.join(self.root_path, 'weights/adv')
-            last_adv_checkpoint = max(sorted(os.listdir(self.adv_save_path)))
-            adv_checkpoint = torch.load(os.path.join(self.adv_save_path, last_adv_checkpoint), map_location=self.adv.device)
-            self.adv.policy_net.load_state_dict(adv_checkpoint['model_state_dict_policy'], strict=True)
-            self.adv.target_net.load_state_dict(adv_checkpoint['model_state_dict_target'], strict=True)
-            self.adv.optimizer.load_state_dict(adv_checkpoint['optimizer_state_dict'])
-            self.adv.steps_done = adv_checkpoint['training_steps']
-            print('DQN adversary loaded. Steps completed: ', self.adv.steps_done)
 
             if self.load_erm:
                 print('Loading ERM from previous experience. Note this may take time')
@@ -125,29 +109,16 @@ class dqn_controller(Node):
             os.mkdir(os.path.join(self.root_path, 'erm'))
             os.mkdir(os.path.join(self.root_path, 'trajectories'))
             os.mkdir(os.path.join(self.root_path, 'logs'))
-            os.mkdir(os.path.join(self.root_path, 'weights/adv'))
-            os.mkdir(os.path.join(self.root_path, 'erm/adv'))
-            os.mkdir(os.path.join(self.root_path, 'trajectories/adv'))
-            os.mkdir(os.path.join(self.root_path, 'logs/adv'))
             self.save_path = os.path.join(self.root_path, 'weights')
             self.save_memory_path = os.path.join(self.root_path, 'erm')
             self.save_traj_path = os.path.join(self.root_path, 'trajectories')
             self.writer = SummaryWriter(os.path.join(self.root_path, 'logs'))
             self.episode = 0
             self.stop_episode = self.episode + self.train_for
-            
-            torch.save({
-                'training_steps': self.adv.steps_done,
-                'model_state_dict_policy': self.adv.policy_net.state_dict(),
-                'model_state_dict_target': self.adv.target_net.state_dict(),
-                'optimizer_state_dict': self.adv.optimizer.state_dict(),
-            }, self.save_path +  '/adv/episode_{}.pt'.format(str(self.episode).zfill(5)))
-            
             print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
         
         #autopilot commands
         self.command = UInt8MultiArray()
-        self.adversary_command = UInt8MultiArray()
 
         #autopilot start stop service data
         self.autopilot_start_stop_req = SetBool.Request()
@@ -156,10 +127,6 @@ class dqn_controller(Node):
         #diver start stop service data
         self.diver_start_stop_req = SetBool.Request()
         self.diver_start_stop_req.data = False
-
-        #current start stop service data
-        self.current_start_stop_req = SetBool.Request()
-        self.current_start_stop_req.data = False
 
         #duration counting
         self.duration = 0
@@ -188,11 +155,6 @@ class dqn_controller(Node):
             self.diver_start_stop_req.data = True
             self.diver_start_stop_client.call_async(self.diver_start_stop_req)
 
-        if not self.current_start_stop_req.data:
-            print('Starting current controller')
-            self.current_start_stop_req.data = True
-            self.current_start_stop_client.call_async(self.current_start_stop_req)
-
         #if finished, reset simulation
         if self.finished:
             self.finish()
@@ -204,14 +166,15 @@ class dqn_controller(Node):
         if coords[0] == -1 and coords[1] == -1 and coords[2] == -1 and coords[3] == -1:
             self.empty_state_counter += 1
             last_location = self.history[-1]
-            yc, xc = last_location[0], last_location[1]
-            dqn_state = [yc, xc, 0.0]
+            yc, xc, a = last_location[0], last_location[1], last_location[2]
+            dqn_state = [yc, xc, a, 0.0]
         else:
             self.empty_state_counter = 0
             yc = (coords[1] + coords[3])/2
             xc = (coords[0] + coords[2])/2
+            a = (np.abs(coords[1] - coords[3]) * np.abs(coords[0] - coords[2]))/(self.img_size*self.img_size)
             yc, xc = normalize_coords(yc, xc, self.img_size, self.img_size)
-            dqn_state = [yc, xc, 1.0]   
+            dqn_state = [yc, xc, a, 1.0]   
    
         if self.empty_state_counter >= self.empty_state_max:
             print("Lost target. Resetting")
@@ -231,19 +194,19 @@ class dqn_controller(Node):
             ns = np.concatenate((np.array(self.history).flatten(), np.array(self.action_history).flatten()))
             self.next_state = torch.tensor(ns, dtype=torch.float32, device=self.dqn.device).unsqueeze(0)
             
-            reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], self.reward_sigma)
+            reward = reward_calculation(dqn_state[0], dqn_state[1], dqn_state[2], dqn_state[3], self.location_sigma, self.area_sigma, self.target_area)
             self.episode_rewards.append(reward)
             self.reward = torch.tensor([reward], dtype=torch.float32, device=self.dqn.device)
             
             if self.evaluate:
                 #select greedy action, dont optimize model or append to replay buffer
-                self.pitch_action, self.yaw_action = self.dqn.select_eval_action(self.next_state)
+                self.pitch_action, self.yaw_action, self.speed_action = self.dqn.select_eval_action(self.next_state)
             else:
                 if self.state is not None:
-                    self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.reward)
-                    self.erm.push(self.state, self.pitch_action, self.yaw_action, self.next_state, self.reward)
+                    self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, self.speed_action, self.next_state, self.reward)
+                    self.erm.push(self.state, self.pitch_action, self.yaw_action, self.speed_action, self.next_state, self.reward)
                     
-                self.pitch_action, self.yaw_action = self.dqn.select_action(self.next_state)  
+                self.pitch_action, self.yaw_action, self.speed_action = self.dqn.select_action(self.next_state)  
                 self.state = self.next_state
 
                 # Perform one step of the optimization (on the policy network)
@@ -258,26 +221,17 @@ class dqn_controller(Node):
                     target_net_state_dict[key] = policy_net_state_dict[key]*self.dqn.TAU + target_net_state_dict[key]*(1-self.dqn.TAU)
                 self.dqn.target_net.load_state_dict(target_net_state_dict)
 
-                self.adv_action_x, self.adv_action_y, self.adv_action_z = self.adv.select_eval_action(self.next_state)
-
             self.history = self.history[self.frame_skip:]
             self.action_history = self.action_history[self.frame_skip:]
                     
-
-        if not self.evaluate:
-            #publish adversary action during training
-            x = self.adv_action_x.detach().cpu().numpy()[0][0]
-            y = self.adv_action_y.detach().cpu().numpy()[0][0]
-            z = self.adv_action_z.detach().cpu().numpy()[0][0]
-            self.adversary_command.data = [int(x), int(y), int(z)]
-            self.current_publisher.publish(self.adversary_command)
             
         #publish actions
         pitch_action_idx = self.pitch_action.detach().cpu().numpy()[0][0]
         yaw_action_idx = self.yaw_action.detach().cpu().numpy()[0][0]
-        self.command.data = [int(pitch_action_idx), int(yaw_action_idx)]
+        speed_action_idx = self.speed_action.detach().cpu().numpy()[0][0]
+        self.command.data = [int(pitch_action_idx), int(yaw_action_idx), int(speed_action_idx)]
         self.command_publisher.publish(self.command)
-        self.action_history.append([pitch_action_idx, yaw_action_idx])
+        self.action_history.append([pitch_action_idx, yaw_action_idx, speed_action_idx])
         return 
     
     def finish(self):
@@ -298,8 +252,8 @@ class dqn_controller(Node):
             self.writer.add_scalar('Duration (Train)', self.duration, self.dqn.steps_done)
 
         if self.state is not None and not self.evaluate and not self.complete:
-            self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, None, self.reward)
-            self.erm.push(self.state, self.pitch_action, self.yaw_action, None, self.reward)
+            self.dqn.memory.push(self.state, self.pitch_action, self.yaw_action, self.speed_action, None, self.reward)
+            self.erm.push(self.state, self.pitch_action, self.yaw_action, self.speed_action, None, self.reward)
 
         if self.episode == self.stop_episode:
             print('Saving checkpoint')
@@ -318,11 +272,8 @@ class dqn_controller(Node):
 
         if self.episode < self.stop_episode:
             self.reset()
-        else:
-            if self.episode % self.switch_every == 0:
-                subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py true', shell=True)
-            else:                
-                subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py false', shell=True)
+        else:              
+            subprocess.Popen('python3 ./src/aqua_rl/aqua_rl/resetter.py false', shell=True)
             self.popen_called = True
         return
 
@@ -343,9 +294,6 @@ class dqn_controller(Node):
         print('Stopping diver controller')
         self.diver_start_stop_req.data = False
         self.diver_start_stop_client.call_async(self.diver_start_stop_req)
-        print('Stopping current controller')
-        self.current_start_stop_req.data = False
-        self.current_start_stop_client.call_async(self.current_start_stop_req)
         sleep(5)
 
         #reset state and history queues
@@ -356,9 +304,7 @@ class dqn_controller(Node):
         self.action_history = []
         self.pitch_action =  torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)   
         self.yaw_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)    
-        self.adv_action_x = torch.tensor([[2]], device=self.adv.device, dtype=torch.long)  
-        self.adv_action_y = torch.tensor([[2]], device=self.adv.device, dtype=torch.long)  
-        self.adv_action_z = torch.tensor([[2]], device=self.adv.device, dtype=torch.long)  
+        self.speed_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)    
 
         #reset flush queues 
         self.flush_detection = 0
