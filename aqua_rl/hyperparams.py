@@ -15,22 +15,22 @@ if use_autopilot_:
     yaw_limit_ = 25
     pitch_gains_ = [3.5, 0.0, 1.0] #P,I,D
     yaw_gains_ = [3.5, 0.0, 1.0] #P,I,D
-    max_speed_ = 0.75
-    min_speed_= 0.1
+    max_speed_ = 1.0
+    min_speed_= 0.25
 else:
     #raw command
-    pitch_limit_ = 0.05
-    yaw_limit_ = 0.5
-    max_speed_ = 0.75
-    min_speed_= 0.1
+    pitch_limit_ = 0.075
+    yaw_limit_ = 0.75
+    max_speed_ = 1.0
+    min_speed_= 0.25
     pitch_gains_ = [0.05, 0.0, 0.1] #P,I,D
     yaw_gains_ = [0.25, 0.0, 0.5] #P,I,D
 
 #dqn hyperparams
 history_size_ = 20
-yaw_action_space_ = 5
-pitch_action_space_ = 5
-speed_action_space_ = 5
+yaw_action_space_ = 7
+pitch_action_space_ = 7
+speed_action_space_ = 7
 frame_skip_ = 1
 
 #end of episode hyperparams
@@ -40,8 +40,8 @@ train_duration_ = 1000
 
 #reward hyperparams
 location_sigma_ = 0.5
-area_sigma_ = 0.05
-target_area_ = 0.025
+area_sigma_ = 0.025
+target_area_ = 0.02
 
 #adversary hyperparams
 adv_x_action_space_ = 5
@@ -63,7 +63,7 @@ switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 8
+experiment_number_ = 10
 train_for_ = 10
 pid_decay_start_ = 0
 pid_decay_end_ = 0
