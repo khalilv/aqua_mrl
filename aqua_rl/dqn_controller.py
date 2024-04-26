@@ -63,8 +63,8 @@ class dqn_controller(Node):
         self.state = None
         self.next_state = None
         self.reward = None
-        self.pitch_action =  torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)   
-        self.yaw_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)    
+        self.pitch_action =  torch.tensor([[3]], device=self.dqn.device, dtype=torch.long)   
+        self.yaw_action = torch.tensor([[3]], device=self.dqn.device, dtype=torch.long)    
         self.speed_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)    
 
         self.action_history = []
@@ -302,8 +302,8 @@ class dqn_controller(Node):
         self.reward = None
         self.history = []
         self.action_history = []
-        self.pitch_action =  torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)   
-        self.yaw_action = torch.tensor([[2]], device=self.dqn.device, dtype=torch.long)    
+        self.pitch_action =  torch.tensor([[3]], device=self.dqn.device, dtype=torch.long)   
+        self.yaw_action = torch.tensor([[3]], device=self.dqn.device, dtype=torch.long)    
         self.speed_action = torch.tensor([[0]], device=self.dqn.device, dtype=torch.long)    
 
         #reset flush queues 
