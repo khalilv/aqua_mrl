@@ -4,7 +4,7 @@ import numpy as np
 import os
 import subprocess
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray, UInt8MultiArray
+from std_msgs.msg import Float32MultiArray
 from std_srvs.srv import SetBool
 from aqua2_interfaces.srv import SetFloat
 from time import sleep, time
@@ -33,9 +33,11 @@ class dqn_controller(Node):
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_
         self.target_area = hyperparams.target_area_
+        self.change_roll_angle_every = hyperparams.change_roll_angle_every_
+        self.roll_limit = hyperparams.roll_limit_
 
         #subscribers and publishers
-        self.command_publisher = self.create_publisher(UInt8MultiArray, hyperparams.autopilot_command_, self.queue_size)
+        self.command_publisher = self.create_publisher(Float32MultiArray, hyperparams.autopilot_command_, self.queue_size)
         self.autopilot_start_stop_client = self.create_client(SetBool, hyperparams.autopilot_start_stop_)
         self.diver_start_stop_client = self.create_client(SetBool, hyperparams.diver_start_stop_)
         self.roll_angle_client = self.create_client(SetFloat, hyperparams.roll_angle_srv_name_)
@@ -44,12 +46,7 @@ class dqn_controller(Node):
             hyperparams.detection_topic_name_, 
             self.detection_callback, 
             self.queue_size)
-        #initialize pid controllers
-        # self.pitch_pid = PID(target = 0, gains = self.pitch_gains, reverse=True, command_range=[-self.pitch_limit, self.pitch_limit])
-        # self.yaw_pid = PID(target = 0, gains = self.yaw_gains, reverse=True, command_range=[-self.yaw_limit, self.yaw_limit])
-        # self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
-        # self.yaw_actions = np.linspace(-self.yaw_limit, self.yaw_limit, self.yaw_action_space)
-
+       
         #flush queues
         self.flush_steps = self.queue_size + 35
         self.flush_detection = 0
@@ -119,7 +116,7 @@ class dqn_controller(Node):
             print('New experiment {} started. Starting from episode 0'.format(str(self.experiment_number)))
         
         #autopilot commands
-        self.command = UInt8MultiArray()
+        self.command = Float32MultiArray()
 
         #autopilot start stop service data
         self.autopilot_start_stop_req = SetBool.Request()
@@ -131,7 +128,7 @@ class dqn_controller(Node):
         
         #roll angle service data
         self.roll_angle_req = SetFloat.Request()
-        self.roll_angle_req.data = False
+        self.roll_angle_req.value = 0.0
 
         #duration counting
         self.duration = 0
@@ -195,11 +192,10 @@ class dqn_controller(Node):
             return
         self.duration += 1
 
-        if self.duration % self.change_roll_angle_every == 0:
-            print('Changing roll angle')
-            self.roll_angle_req.data = np.random.uniform(-10,10)
-            self.diver_start_stop_client.call_async(self.diver_start_stop_req)
-        
+        if self.duration % self.change_roll_angle_every == 0:            
+            self.roll_angle_req.value = np.random.uniform(-hyperparams.roll_limit_,hyperparams.roll_limit_)
+            self.roll_angle_client.call_async(self.roll_angle_req)
+                
         self.history.append(dqn_state)
         if len(self.history) == self.history_size and len(self.action_history) == self.history_size - 1:
             ns = np.concatenate((np.array(self.history).flatten(), np.array(self.action_history).flatten()))
@@ -240,7 +236,7 @@ class dqn_controller(Node):
         pitch_action_idx = self.pitch_action.detach().cpu().numpy()[0][0]
         yaw_action_idx = self.yaw_action.detach().cpu().numpy()[0][0]
         speed_action_idx = self.speed_action.detach().cpu().numpy()[0][0]
-        self.command.data = [int(pitch_action_idx), int(yaw_action_idx), int(speed_action_idx)]
+        self.command.data = [float(pitch_action_idx), float(yaw_action_idx), float(speed_action_idx)]
         self.command_publisher.publish(self.command)
         self.action_history.append([pitch_action_idx, yaw_action_idx, speed_action_idx])
         return 
@@ -305,6 +301,9 @@ class dqn_controller(Node):
         print('Stopping diver controller')
         self.diver_start_stop_req.data = False
         self.diver_start_stop_client.call_async(self.diver_start_stop_req)
+        print('Resetting roll angle')
+        self.roll_angle_req.value = 0.0
+        self.roll_angle_client.call_async(self.roll_angle_req)
         sleep(5)
 
         #reset state and history queues
@@ -329,10 +328,6 @@ class dqn_controller(Node):
         self.complete = False
         print('-------------- Completed Reset --------------')
         return
-    
-    # def discretize(self, v, l):
-    #     index = np.argmin(np.abs(np.subtract(l,v)))
-    #     return index
     
 def main(args=None):
     rclpy.init(args=args)
