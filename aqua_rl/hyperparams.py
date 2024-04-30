@@ -88,7 +88,7 @@ else:
     camera_topic_name_ = '/camera/left/image_raw/compressed'
     autopilot_pitch_gains_ = [0.5181, 0.0, 0.9] #P,I,D
     autopilot_yaw_gains_ = [0.5181, 0.0, 0.0] #P,I,D
-    autopilot_roll_gains_ = [0.25, 0.0, 0.75] #P,I,D
+    autopilot_roll_gains_ = [2.75, 0.0, 3.75] #P,I,D
     autopilot_command_ = '/autopilot/command'
     autopilot_start_stop_ = '/autopilot/start_stop'
     diver_start_stop_ = '/diver/start_stop'
@@ -105,3 +105,4 @@ else:
     diver_speed_srv_name_ = '/diver/set_speed'
     autopilot_yaw_limit_name_ = '/autopilot/set_yaw_limit'
     autopilot_pitch_limit_name_ = '/autopilot/set_pitch_limit'
+    roll_angle_srv_name_ = '/autopilot/set_roll_angle'

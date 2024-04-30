@@ -27,8 +27,8 @@ class autopilot(Node):
         self.yaw_action_space = hyperparams.yaw_action_space_
         self.speed_action_space = hyperparams.speed_action_space_
 
-        self.imu_subscriber = self.create_subscription(AquaPose, '/aqua/pose', self.imu_callback, self.queue_size)
-        self.command_publisher = self.create_publisher(Command, '/a13/command', self.queue_size)
+        self.imu_subscriber = self.create_subscription(AquaPose, hyperparams.imu_topic_name_, self.imu_callback, self.queue_size)
+        self.command_publisher = self.create_publisher(Command, hyperparams.command_topic_name_, self.queue_size)
         self.action_subscriber = self.create_subscription(
             UInt8MultiArray,
             hyperparams.autopilot_command_,
@@ -47,6 +47,10 @@ class autopilot(Node):
             SetFloat,
             hyperparams.autopilot_pitch_limit_name_,
             self.set_pitch_limit)
+        self.roll_angle_service = self.create_service(
+            SetFloat,
+            hyperparams.roll_angle_srv_name_,
+            self.set_roll_angle)
         
         self.measured_roll_angle = None
         self.measured_pitch_angle = None
@@ -170,6 +174,12 @@ class autopilot(Node):
         self.pitch_limit = request.value
         self.pitch_actions = np.linspace(-self.pitch_limit, self.pitch_limit, self.pitch_action_space)
         response.msg = 'Set pitch limit successfully'
+        return response
+    
+    def set_roll_angle(self, request, response):
+        print('Setting target roll angle to {}'.format(request.value))
+        self.roll_pid.target = request.value
+        response.msg = 'Set roll angle successfully'
         return response
 
 
