@@ -6,6 +6,7 @@ import subprocess
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, UInt8MultiArray
 from std_srvs.srv import SetBool
+from aqua2_interfaces.srv import SetFloat
 from time import sleep, time
 from aqua_rl.control.ThreeHeadDQN import ThreeHeadDQN, ThreeHeadReplayMemory
 from aqua_rl.helpers import reward_calculation, normalize_coords
@@ -37,12 +38,12 @@ class dqn_controller(Node):
         self.command_publisher = self.create_publisher(UInt8MultiArray, hyperparams.autopilot_command_, self.queue_size)
         self.autopilot_start_stop_client = self.create_client(SetBool, hyperparams.autopilot_start_stop_)
         self.diver_start_stop_client = self.create_client(SetBool, hyperparams.diver_start_stop_)
+        self.roll_angle_client = self.create_client(SetFloat, hyperparams.roll_angle_srv_name_)
         self.detection_subscriber = self.create_subscription(
             Float32MultiArray, 
             hyperparams.detection_topic_name_, 
             self.detection_callback, 
             self.queue_size)
-        
         #initialize pid controllers
         # self.pitch_pid = PID(target = 0, gains = self.pitch_gains, reverse=True, command_range=[-self.pitch_limit, self.pitch_limit])
         # self.yaw_pid = PID(target = 0, gains = self.yaw_gains, reverse=True, command_range=[-self.yaw_limit, self.yaw_limit])
@@ -127,6 +128,10 @@ class dqn_controller(Node):
         #diver start stop service data
         self.diver_start_stop_req = SetBool.Request()
         self.diver_start_stop_req.data = False
+        
+        #roll angle service data
+        self.roll_angle_req = SetFloat.Request()
+        self.roll_angle_req.data = False
 
         #duration counting
         self.duration = 0
@@ -135,11 +140,12 @@ class dqn_controller(Node):
         #popen_called
         self.popen_called = False
 
+        self.change_roll_angle_every = 100
+
         print('Initialized: dqn controller')
     
-
     def detection_callback(self, coords):
-        
+     
         #flush detections queue
         if self.flush_detection < self.flush_steps:
             self.flush_detection += 1
@@ -188,6 +194,11 @@ class dqn_controller(Node):
             self.complete = True
             return
         self.duration += 1
+
+        if self.duration % self.change_roll_angle_every == 0:
+            print('Changing roll angle')
+            self.roll_angle_req.data = np.random.uniform(-10,10)
+            self.diver_start_stop_client.call_async(self.diver_start_stop_req)
         
         self.history.append(dqn_state)
         if len(self.history) == self.history_size and len(self.action_history) == self.history_size - 1:

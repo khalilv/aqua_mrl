@@ -4,7 +4,7 @@ from rclpy.node import Node
 from aqua_rl.control.PID import AnglePID
 from aqua2_interfaces.msg import AquaPose, Command
 from aqua_rl import hyperparams
-from std_msgs.msg import UInt8MultiArray
+from std_msgs.msg import Float32MultiArray
 from std_srvs.srv import SetBool
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
@@ -15,22 +15,20 @@ class autopilot(Node):
     def __init__(self):
         super().__init__('autopilot')
         self.queue_size = hyperparams.queue_size_
-        self.use_autopilot = hyperparams.use_autopilot_
         self.max_speed = hyperparams.max_speed_
         self.min_speed = hyperparams.min_speed_
         self.roll_gains = hyperparams.autopilot_roll_gains_
-        self.pitch_gains = hyperparams.autopilot_pitch_gains_
-        self.yaw_gains = hyperparams.autopilot_yaw_gains_
         self.pitch_limit = hyperparams.pitch_limit_
         self.yaw_limit = hyperparams.yaw_limit_
         self.pitch_action_space = hyperparams.pitch_action_space_
         self.yaw_action_space = hyperparams.yaw_action_space_
         self.speed_action_space = hyperparams.speed_action_space_
+        self.publish_direct_command = hyperparams.publish_direct_command_
 
         self.imu_subscriber = self.create_subscription(AquaPose, hyperparams.imu_topic_name_, self.imu_callback, self.queue_size)
         self.command_publisher = self.create_publisher(Command, hyperparams.command_topic_name_, self.queue_size)
         self.action_subscriber = self.create_subscription(
-            UInt8MultiArray,
+            Float32MultiArray,
             hyperparams.autopilot_command_,
             self.action_callback,
             self.queue_size)
@@ -65,8 +63,6 @@ class autopilot(Node):
         self.yaw_target = 90.0
 
         self.roll_pid = AnglePID(target = self.roll_target, gains = self.roll_gains, reverse=True)
-        self.pitch_pid = AnglePID(target = self.pitch_target, gains = self.pitch_gains)
-        self.yaw_pid = AnglePID(target = self.yaw_target, gains = self.yaw_gains)
 
         self.command = Command()
         self.command.pitch = 0.0
@@ -101,41 +97,35 @@ class autopilot(Node):
         
         if self.publish_actions:
             self.command.roll = self.roll_pid.control(self.measured_roll_angle)
-            if self.use_autopilot:
-                self.command.pitch = self.pitch_pid.control(self.measured_pitch_angle)
-                self.command.yaw = self.yaw_pid.control(self.measured_yaw_angle)
-            else:
-                self.command.pitch = self.pitch_action_to_execute
-                self.command.yaw = self.yaw_action_to_execute
-                self.command.speed = self.speed_action_to_execute
+            self.command.pitch = self.pitch_action_to_execute
+            self.command.yaw = self.yaw_action_to_execute
+            self.command.speed = self.speed_action_to_execute
             self.command_publisher.publish(self.command)
         
         return
     
     def action_callback(self, a):
         actions = np.array(a.data)
-        pitch_action = self.pitch_actions[int(actions[0])]
-        yaw_action = self.yaw_actions[int(actions[1])]
-        speed_action = self.speed_actions[int(actions[2])]
-        if self.use_autopilot:
-            self.pitch_pid.target = self.measured_pitch_angle + pitch_action
-            self.yaw_pid.target = self.measured_yaw_angle + yaw_action
+        if self.publish_direct_command:
+            pitch_action = float(actions[0])
+            yaw_action = float(actions[1])
+            speed_action = float(actions[2])
         else:
-            self.pitch_action_to_execute = pitch_action
-            self.yaw_action_to_execute = yaw_action
-            self.speed_action_to_execute = speed_action
+            pitch_action = self.pitch_actions[int(actions[0])]
+            yaw_action = self.yaw_actions[int(actions[1])]
+            speed_action = self.speed_actions[int(actions[2])]
+
+        self.pitch_action_to_execute = pitch_action
+        self.yaw_action_to_execute = yaw_action
+        self.speed_action_to_execute = speed_action
         return
 
     def start_stop_callback(self, request, response):
         if request.data:
             self.publish_actions = True
-            if self.use_autopilot:
-                self.pitch_pid.target = 0.0
-                self.yaw_pid.target = 90.0
-            else:
-                self.pitch_action_to_execute = 0.0
-                self.yaw_action_to_execute = 0.0
-                self.speed_action_to_execute = 0.0
+            self.pitch_action_to_execute = 0.0
+            self.yaw_action_to_execute = 0.0
+            self.speed_action_to_execute = 0.0
             response.message = 'Autopilot started'
         else:
             self.publish_actions = False
