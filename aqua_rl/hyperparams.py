@@ -5,10 +5,10 @@ queue_size_ = 5
 img_size_ = 416
 
 #control hyperparams
-diver_max_speed_ = 0.35
+diver_max_speed_ = 0.75
 
 #autopilot hyperparams
-publish_direct_command_ = True
+publish_direct_command_ = False
 pitch_limit_ = 0.075
 yaw_limit_ = 0.75
 max_speed_ = 1.0
@@ -17,7 +17,7 @@ pitch_gains_ = [0.05, 0.0, 0.1] #P,I,D
 yaw_gains_ = [0.25, 0.0, 0.5] #P,I,D
 thrust_gains_ = [500.0, 0.0, 0.0]
 change_roll_angle_every_  = 50
-roll_limit_ = 0.0
+roll_limit_ = 5.0
 
 #dqn hyperparams
 history_size_ = 20
@@ -33,7 +33,7 @@ train_duration_ = 1000
 
 #reward hyperparams
 location_sigma_ = 0.5
-area_sigma_ = 0.025
+area_sigma_ = 0.015
 target_area_ = 0.02
 
 #adversary hyperparams
@@ -56,7 +56,7 @@ switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 10
+experiment_number_ = 11
 train_for_ = 10
 
 #eval hyperparams
