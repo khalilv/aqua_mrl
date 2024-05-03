@@ -7,7 +7,6 @@ from aqua_rl import hyperparams
 from std_srvs.srv import SetBool
 from ir_aquasim_interfaces.srv import SetPosition
 from geometry_msgs.msg import Pose
-from time import time
 
 class diver_controller(Node):
 
@@ -57,9 +56,6 @@ class diver_controller(Node):
         self.starting_pose.orientation.z = 0.4976952
         self.starting_pose.orientation.w = 0.5022942
 
-        self.acceleration = [0.0, 0.0, 0.0]
-        self.last_time = time()
-
         #flag to move diver
         self.move_diver = False
         timer_period = 5  # seconds
@@ -67,37 +63,23 @@ class diver_controller(Node):
         print('Initialized: diver controller')
 
     def publish_diver_command(self):  
-        self.acceleration[0] = np.random.uniform(0, 0.05)
-        self.acceleration[1] = np.random.uniform(-0.25, 0.25)
-        self.acceleration[2] = np.random.uniform(-0.25, 0.25)
-
+        #generate velocity
+        self.diver_cmd.vx = np.random.uniform(0.3, 0.775)
+        self.diver_cmd.vy = np.random.uniform(-self.max_speed, self.max_speed)
+        self.diver_cmd.vz = np.random.uniform(-self.max_speed, self.max_speed)
         return
     
     def diver_pose_callback(self, pose):        
         self.diver_pose = [pose.x, pose.y, pose.z]
-        current_time = time()
         if self.diver_pose is not None and self.move_diver:
-            dt = np.abs(current_time-self.last_time)
-
-            #generate velocity
-            self.diver_cmd.vx += self.acceleration[0]*dt
-            self.diver_cmd.vy += self.acceleration[1]*dt
-            self.diver_cmd.vz += self.acceleration[2]*dt
-
-            #clip velocity to range
-            self.diver_cmd.vx = np.clip(self.diver_cmd.vx, 0.1, 0.6)
-            self.diver_cmd.vy = np.clip(self.diver_cmd.vy, -self.max_speed, self.max_speed)
-            self.diver_cmd.vz = np.clip(self.diver_cmd.vz, -self.max_speed, self.max_speed)
-
+            
             #change velocity if outside depth range           
             if self.diver_pose[1] > self.depth_range[0] and self.diver_cmd.vy > 0:
                 self.diver_cmd.vy *= -1
             elif self.diver_pose[1] < self.depth_range[1] and self.diver_cmd.vy < 0:
                 self.diver_cmd.vy *= -1
-
             #publish
             self.publisher.publish(self.diver_cmd)
-        self.last_time = current_time
         return 
     
     def start_stop_callback(self, request, response):

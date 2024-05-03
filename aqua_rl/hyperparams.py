@@ -5,7 +5,7 @@ queue_size_ = 5
 img_size_ = 416
 
 #control hyperparams
-diver_max_speed_ = 0.75
+diver_max_speed_ = 0.5
 
 #autopilot hyperparams
 publish_direct_command_ = False
@@ -17,7 +17,7 @@ pitch_gains_ = [0.05, 0.0, 0.1] #P,I,D
 yaw_gains_ = [0.25, 0.0, 0.5] #P,I,D
 thrust_gains_ = [500.0, 0.0, 0.0]
 change_roll_angle_every_  = 50
-roll_limit_ = 5.0
+roll_limit_ = 0.0
 
 #dqn hyperparams
 history_size_ = 20
@@ -56,7 +56,7 @@ switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 11
+experiment_number_ = 12
 train_for_ = 10
 
 #eval hyperparams
@@ -69,7 +69,7 @@ eval_duration_ = 1000
 command_topic_name_ = '/a13/command'
 imu_topic_name_ = '/aqua/pose'
 camera_topic_name_ = '/camera/left/image_raw/compressed'
-autopilot_roll_gains_ = [2.75, 0.0, 3.75] #P,I,D
+autopilot_roll_gains_ = [0.25, 0.0, 0.75] #P,I,D
 autopilot_command_ = '/autopilot/command'
 autopilot_start_stop_ = '/autopilot/start_stop'
 diver_start_stop_ = '/diver/start_stop'

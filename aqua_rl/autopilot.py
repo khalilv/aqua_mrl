@@ -167,7 +167,7 @@ class autopilot(Node):
         return response
     
     def set_roll_angle(self, request, response):
-        print('Setting target roll angle to {}'.format(request.value))
+        # print('Setting target roll angle to {}'.format(request.value))
         self.roll_pid.target = request.value
         response.msg = 'Set roll angle successfully'
         return response
