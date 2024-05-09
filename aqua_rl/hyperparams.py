@@ -5,7 +5,7 @@ queue_size_ = 5
 img_size_ = 416
 
 #control hyperparams
-diver_max_speed_ = 0.5
+diver_max_speed_ = 0.35
 
 #autopilot hyperparams
 publish_direct_command_ = False
@@ -33,7 +33,7 @@ train_duration_ = 1000
 
 #reward hyperparams
 location_sigma_ = 0.5
-area_sigma_ = 0.015
+area_sigma_ = 0.025
 target_area_ = 0.02
 
 #adversary hyperparams
@@ -56,7 +56,7 @@ switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 12
+experiment_number_ = 13
 train_for_ = 10
 
 #eval hyperparams

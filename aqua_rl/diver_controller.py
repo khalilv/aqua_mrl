@@ -64,7 +64,7 @@ class diver_controller(Node):
 
     def publish_diver_command(self):  
         #generate velocity
-        self.diver_cmd.vx = np.random.uniform(0.3, 0.775)
+        self.diver_cmd.vx = np.random.uniform(0.5, 0.775)
         self.diver_cmd.vy = np.random.uniform(-self.max_speed, self.max_speed)
         self.diver_cmd.vz = np.random.uniform(-self.max_speed, self.max_speed)
         return
