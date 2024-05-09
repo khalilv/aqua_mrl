@@ -82,7 +82,7 @@ class autopilot(Node):
         self.starting_pose = Pose()
         self.starting_pose.position.x = 70.0
         self.starting_pose.position.z = -0.3                               
-        self.starting_pose.position.y = -10.0
+        self.starting_pose.position.y = -9.5
         self.starting_pose.orientation.x = 0.0
         self.starting_pose.orientation.y = -0.7071068
         self.starting_pose.orientation.z = 0.0

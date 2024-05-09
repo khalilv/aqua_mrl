@@ -19,6 +19,7 @@ class detect(Node):
         super().__init__('detect')
         self.queue_size = hyperparams.queue_size_
         self.img_size = hyperparams.img_size_
+        self.debris_range = hyperparams.debris_range_
 
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
@@ -70,6 +71,11 @@ class detect(Node):
 
         if len(outputs) > 0:
             self.coord = max(outputs, key=lambda x: x[4])
+            xc = (self.coord[0]+self.coord[2])/2
+            yc = (self.coord[1]+self.coord[3])/2
+            #remove detections in debris range
+            if xc > self.debris_range[0] and xc < self.debris_range[1] and yc > self.debris_range[0] and yc < self.debris_range[1]:
+                self.coord =  [-1, -1, -1, -1]
         else:
             self.coord = [-1, -1, -1, -1]
 

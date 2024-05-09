@@ -30,6 +30,7 @@ frame_skip_ = 1
 empty_state_max_ = 20
 depth_range_ = [-6, -12]
 train_duration_ = 1000
+debris_range_ = [156,260]
 
 #reward hyperparams
 location_sigma_ = 0.5
@@ -49,6 +50,7 @@ adv_z_limit_ = 2.0
 #6 -> 0.75
 #7 -> 1.0
 #8 -> 2.0
+#13 -> best w/ linear velocity
 
 #rarl hyperparams
 switch_every_ = 200
@@ -56,7 +58,7 @@ switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 13
+experiment_number_ = 14
 train_for_ = 10
 
 #eval hyperparams
