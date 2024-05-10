@@ -211,6 +211,10 @@ def location_analysis(evaluation_directory, location_bins=50, area_bins=50):
     plt.hist(detected_locations[:,2], bins=area_bins, color='g', alpha=0.7)
     plt.title('Diver Size Distribution')
     plt.xlabel('Normalized bounding box area')
+    plt.axvline(x=0.02, color='k', linestyle='--', label='Target') 
+    plt.legend()
+    plt.xlim(0, 0.05)
+
     plt.ylabel('Count')
     plt.show()
 

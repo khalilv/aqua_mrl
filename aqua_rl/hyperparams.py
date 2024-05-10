@@ -8,7 +8,7 @@ img_size_ = 416
 diver_max_speed_ = 0.35
 
 #autopilot hyperparams
-publish_direct_command_ = True
+publish_direct_command_ = False
 pitch_limit_ = 0.075
 yaw_limit_ = 0.75
 max_speed_ = 1.0
