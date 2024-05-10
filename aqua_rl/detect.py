@@ -11,6 +11,7 @@ import os
 from aqua_rl import hyperparams
 from aqua_rl.YOLOv7.yolov7 import YoloV7
 from argparse import Namespace
+from std_srvs.srv import SetBool
 
 
 class detect(Node):
@@ -26,6 +27,10 @@ class detect(Node):
             hyperparams.camera_topic_name_,
             self.camera_callback,
             self.queue_size)
+        self.debris_service = self.create_service(
+            SetBool,
+            hyperparams.debris_srv_name_,
+            self.debris_callback)
         self.coords_publisher = self.create_publisher(Float32MultiArray, hyperparams.detection_topic_name_, self.queue_size)
         self.coords = Float32MultiArray()
         self.cv_bridge = cv_bridge.CvBridge()
@@ -49,7 +54,7 @@ class detect(Node):
         self.t0 = 0
 
         self.coord = None
-
+        self.debris_exists = False
         cv2.namedWindow("yolov7", cv2.WINDOW_AUTOSIZE)
         
         print('Initialized: detection module')
@@ -74,7 +79,7 @@ class detect(Node):
             xc = (self.coord[0]+self.coord[2])/2
             yc = (self.coord[1]+self.coord[3])/2
             #remove detections in debris range
-            if xc > self.debris_range[0] and xc < self.debris_range[1] and yc > self.debris_range[0] and yc < self.debris_range[1]:
+            if self.debris_exists and xc > self.debris_range[0] and xc < self.debris_range[1] and yc > self.debris_range[0] and yc < self.debris_range[1]:
                 self.coord =  [-1, -1, -1, -1]
         else:
             self.coord = [-1, -1, -1, -1]
@@ -86,6 +91,18 @@ class detect(Node):
         print('Publishing Frequency: ', (t1 - self.t0))
         self.t0 = t1
         return
+    
+    def debris_callback(self, request, response):
+        if request.data:
+            self.debris_exists = True
+            response.message = 'Debris initialized'
+        else:
+            self.debris_exists = False
+            response.message = 'Debris removed'
+        response.success = True
+        return response
+
+        
         
 def main(args=None):
     rclpy.init(args=args)

@@ -8,7 +8,7 @@ img_size_ = 416
 diver_max_speed_ = 0.35
 
 #autopilot hyperparams
-publish_direct_command_ = False
+publish_direct_command_ = True
 pitch_limit_ = 0.075
 yaw_limit_ = 0.75
 max_speed_ = 1.0
@@ -16,8 +16,7 @@ min_speed_= 0.25
 pitch_gains_ = [0.05, 0.0, 0.1] #P,I,D
 yaw_gains_ = [0.25, 0.0, 0.5] #P,I,D
 thrust_gains_ = [500.0, 0.0, 0.0]
-change_roll_angle_every_  = 50
-roll_limit_ = 0.0
+initialize_debris_after_  = 50
 
 #dqn hyperparams
 history_size_ = 20
@@ -88,4 +87,4 @@ diver_seed_srv_name_ = '/diver/set_seed'
 diver_speed_srv_name_ = '/diver/set_speed'
 autopilot_yaw_limit_name_ = '/autopilot/set_yaw_limit'
 autopilot_pitch_limit_name_ = '/autopilot/set_pitch_limit'
-roll_angle_srv_name_ = '/autopilot/set_roll_angle'
+debris_srv_name_ = '/debris/start_stop'

@@ -33,14 +33,14 @@ class dqn_controller(Node):
         self.frame_skip = hyperparams.frame_skip_
         self.empty_state_max = hyperparams.empty_state_max_
         self.target_area = hyperparams.target_area_
-        self.change_roll_angle_every = hyperparams.change_roll_angle_every_
-        self.roll_limit = hyperparams.roll_limit_
+        self.initialize_debris_after = hyperparams.initialize_debris_after_
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Float32MultiArray, hyperparams.autopilot_command_, self.queue_size)
         self.autopilot_start_stop_client = self.create_client(SetBool, hyperparams.autopilot_start_stop_)
         self.diver_start_stop_client = self.create_client(SetBool, hyperparams.diver_start_stop_)
-        self.roll_angle_client = self.create_client(SetFloat, hyperparams.roll_angle_srv_name_)
+        self.debris_client = self.create_client(SetBool, hyperparams.debris_srv_name_)
+
         self.detection_subscriber = self.create_subscription(
             Float32MultiArray, 
             hyperparams.detection_topic_name_, 
@@ -122,22 +122,20 @@ class dqn_controller(Node):
         self.autopilot_start_stop_req = SetBool.Request()
         self.autopilot_start_stop_req.data = False
 
+        #debris service data
+        self.debris_req = SetBool.Request()
+        self.debris_req.data = False
+
         #diver start stop service data
         self.diver_start_stop_req = SetBool.Request()
         self.diver_start_stop_req.data = False
         
-        #roll angle service data
-        self.roll_angle_req = SetFloat.Request()
-        self.roll_angle_req.value = 0.0
-
         #duration counting
         self.duration = 0
         self.empty_state_counter = 0
 
         #popen_called
         self.popen_called = False
-
-        self.change_roll_angle_every = 100
 
         print('Initialized: dqn controller')
     
@@ -168,7 +166,10 @@ class dqn_controller(Node):
         #check for null input from detection module
         if coords[0] == -1 and coords[1] == -1 and coords[2] == -1 and coords[3] == -1:
             self.empty_state_counter += 1
-            last_location = self.history[-1]
+            if len(self.history) > 0:
+                last_location = self.history[-1]
+            else:
+                return #diver has not been located yet
             yc, xc, a = last_location[0], last_location[1], last_location[2]
             dqn_state = [yc, xc, a, 0.0]
         else:
@@ -192,9 +193,10 @@ class dqn_controller(Node):
             return
         self.duration += 1
 
-        if self.duration % self.change_roll_angle_every == 0:            
-            self.roll_angle_req.value = np.random.uniform(-hyperparams.roll_limit_,hyperparams.roll_limit_)
-            self.roll_angle_client.call_async(self.roll_angle_req)
+        if self.duration == self.initialize_debris_after and not self.debris_req.data:            
+            print('Initializing debris')
+            self.debris_req.data = True
+            self.debris_client.call_async(self.debris_req)
                 
         self.history.append(dqn_state)
         if len(self.history) == self.history_size and len(self.action_history) == self.history_size - 1:
@@ -301,9 +303,9 @@ class dqn_controller(Node):
         print('Stopping diver controller')
         self.diver_start_stop_req.data = False
         self.diver_start_stop_client.call_async(self.diver_start_stop_req)
-        print('Resetting roll angle')
-        self.roll_angle_req.value = 0.0
-        self.roll_angle_client.call_async(self.roll_angle_req)
+        print('Removing debris')
+        self.debris_req.data = False
+        self.debris_client.call_async(self.debris_req)
         sleep(5)
 
         #reset state and history queues

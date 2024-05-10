@@ -183,10 +183,41 @@ def episodic_returns(experiments):
     plt.legend()
     plt.show()
 
+def location_analysis(evaluation_directory, location_bins=50, area_bins=50):
+    rewards = []
+    detected_locations = []
+    for _,file_path in enumerate(sorted(os.listdir(evaluation_directory))):
+        file = os.path.join(evaluation_directory, file_path)
+        if os.path.isfile(file):
+            with open(file, 'rb') as f:
+                r = np.load(f)
+                locations = np.load(f)
+                rewards.append(np.sum(r))
+                dl = locations[locations[:, 3] == 1]
+                detected_locations.append(dl)
+    detected_locations = np.vstack(detected_locations)
+    heatmap, _, _ = np.histogram2d(detected_locations[:, 1], detected_locations[:, 0], bins=location_bins, range=[[-1,1],[-1,1]])
+    extent = [-1, 1, -1, 1]
+    plt.imshow(heatmap.T, extent=extent, origin='lower', interpolation='nearest', aspect='auto')
+    plt.colorbar()
+    plt.ylim(1, -1)
+    plt.xticks([-1, -0.5, 0, 0.5, 1])
+    plt.yticks([-1, -0.5, 0, 0.5, 1])
+    plt.xlabel('Normalized x coordinate')
+    plt.ylabel('Normalized y coordinate')
+    plt.title('Diver Location Distribution')
+    plt.show()
+
+    plt.hist(detected_locations[:,2], bins=area_bins, color='g', alpha=0.7)
+    plt.title('Diver Size Distribution')
+    plt.xlabel('Normalized bounding box area')
+    plt.ylabel('Count')
+    plt.show()
 
 
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/pitch_change', True)
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/yaw_change', False)
 
-density_analysis([5,8], ['Baseline','RARL'])
+# density_analysis([5,8], ['Baseline','RARL'])
 # episodic_returns([5,8])
+location_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/base_environment')

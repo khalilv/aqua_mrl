@@ -45,10 +45,6 @@ class autopilot(Node):
             SetFloat,
             hyperparams.autopilot_pitch_limit_name_,
             self.set_pitch_limit)
-        self.roll_angle_service = self.create_service(
-            SetFloat,
-            hyperparams.roll_angle_srv_name_,
-            self.set_roll_angle)
         
         self.measured_roll_angle = None
         self.measured_pitch_angle = None
@@ -82,7 +78,7 @@ class autopilot(Node):
         self.starting_pose = Pose()
         self.starting_pose.position.x = 70.0
         self.starting_pose.position.z = -0.3                               
-        self.starting_pose.position.y = -9.5
+        self.starting_pose.position.y = -10.0
         self.starting_pose.orientation.x = 0.0
         self.starting_pose.orientation.y = -0.7071068
         self.starting_pose.orientation.z = 0.0
@@ -166,12 +162,6 @@ class autopilot(Node):
         response.msg = 'Set pitch limit successfully'
         return response
     
-    def set_roll_angle(self, request, response):
-        # print('Setting target roll angle to {}'.format(request.value))
-        self.roll_pid.target = request.value
-        response.msg = 'Set roll angle successfully'
-        return response
-
 
 def main(args=None):
     rclpy.init(args=args)

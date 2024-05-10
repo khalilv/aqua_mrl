@@ -49,8 +49,8 @@ class diver_controller(Node):
         #starting diver position and orientation
         self.starting_pose = Pose()
         self.starting_pose.position.x = 62.5
-        self.starting_pose.position.z = 0.5                               
-        self.starting_pose.position.y = -11.0
+        self.starting_pose.position.z = 0.3                               
+        self.starting_pose.position.y = -10.0
         self.starting_pose.orientation.x = 0.4976952
         self.starting_pose.orientation.y = -0.5022942
         self.starting_pose.orientation.z = 0.4976952
