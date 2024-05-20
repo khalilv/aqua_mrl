@@ -1,7 +1,8 @@
 import numpy as np 
 import os 
 from matplotlib import pyplot as plt
-from aqua_rl import hyperparams
+import pandas as pd 
+from scipy.interpolate import interp1d
 
 def interdependency_study(dir, pitch_change):
     with open(os.path.join(dir, 'roll0.npy'), 'rb') as f:
@@ -174,7 +175,7 @@ def episodic_returns(experiments):
                     else:
                         train_returns.append(np.sum(r))
                         train_x.append(i)
-        #plt.plot(train_x, train_returns, label='Train {}'.format(str(exp)))
+        plt.plot(train_x, train_returns, label='Train {}'.format(str(exp)))
         plt.plot(eval_x, eval_returns, label='Eval {}'.format(str(exp)))
     
     plt.xlabel('Episode')
@@ -218,10 +219,88 @@ def location_analysis(evaluation_directory, location_bins=50, area_bins=50):
     plt.ylabel('Count')
     plt.show()
 
+def debris_analysis(dqn_directory, pid_directory, duration=False):
+    N = 50
+    x_max = 50000
+
+    if duration:
+        dqn_directory = os.path.join(dqn_directory, 'duration')
+    else:
+        dqn_directory = os.path.join(dqn_directory, 'rewards')
+
+    # Define the filenames
+    filenames = ['1_logs.csv', '2_logs.csv', '3_logs.csv']
+    
+    # Initialize lists to hold all x and y data
+    all_x_data = []
+    all_y_data = []
+    
+    # Loop through each file to read and store the data
+    for filename in filenames:
+        filepath = os.path.join(dqn_directory, filename)
+        data = pd.read_csv(filepath)
+        x = data.iloc[:, 1].values - 1473792
+        y = data.iloc[:, 2].values 
+        all_x_data.append(x)
+        all_y_data.append(y)
+
+    # Determine common x values
+    x_min = min(min(x) for x in all_x_data)
+    common_x_values = np.linspace(x_min, x_max, num=N) 
+
+    # Interpolate y values at common x values
+    interpolated_y_values = []
+    for x, y in zip(all_x_data, all_y_data):
+        f = interp1d(x, y, bounds_error=False, fill_value='extrapolate')
+        interpolated_y_values.append(f(common_x_values))
+
+    interpolated_y_values = np.array(interpolated_y_values)
+
+    # Calculate mean and variance
+    mean_y_values = np.mean(interpolated_y_values, axis=0)
+    std_y_values = np.std(interpolated_y_values, axis=0)
+    plt.plot(common_x_values, mean_y_values, label='DDQN', color='green')
+    plt.fill_between(common_x_values, mean_y_values - std_y_values, mean_y_values + std_y_values, color='lightgreen')
+    
+    experiments = ['1','2','3']
+    pid_y_values = []
+    for exp in experiments:
+        y = []
+        filepath = os.path.join(pid_directory, exp)
+        for file in sorted(os.listdir(filepath)):
+            with open(os.path.join(filepath,file), 'rb') as f:
+                r = np.load(f)
+                if duration:
+                    y.append(len(r))
+                else:
+                    y.append(np.sum(r))
+        pid_y_values.append(y[0:N])
+    
+    pid_y_values = np.array(pid_y_values)
+    pid_mean = np.mean(pid_y_values, axis=0)
+    pid_std = np.std(pid_y_values, axis=0)
+    plt.plot(common_x_values, pid_mean, label='PID', color='blue')
+    plt.fill_between(common_x_values, pid_mean - pid_std, pid_mean + pid_std, color='lightblue')
+    
+    plt.legend()
+    plt.xlabel('Interaction Steps')
+    if duration:
+        plt.ylabel('Timesteps')
+        plt.title('Tracking Duration')
+        plt.savefig('debris_duration.png', dpi=600)
+    else:
+        plt.title('Tracking Performance')
+        plt.ylabel('Total Reward')
+        plt.savefig('debris_reward.png', dpi=600)
+
+
+
 
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/pitch_change', True)
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/yaw_change', False)
 
 # density_analysis([5,8], ['Baseline','RARL'])
-# episodic_returns([5,8])
+# episodic_returns([16])
 location_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/base_environment')
+#debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', True)
+debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', False)

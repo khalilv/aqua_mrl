@@ -6,6 +6,7 @@ from rclpy.node import Node
 from aqua_rl import hyperparams 
 import numpy as np
 import time
+import random
 from std_msgs.msg import Float32MultiArray
 import os
 from aqua_rl import hyperparams
@@ -20,7 +21,8 @@ class detect(Node):
         super().__init__('detect')
         self.queue_size = hyperparams.queue_size_
         self.img_size = hyperparams.img_size_
-        self.debris_range = hyperparams.debris_range_
+        self.debris_x_range = hyperparams.debris_x_range_
+        self.debris_y_range = hyperparams.debris_y_range_
 
         self.camera_subscriber = self.create_subscription(
             CompressedImage,
@@ -70,7 +72,10 @@ class detect(Node):
             self.dataset_size += 1
 
         outputs, image_with_detections = self.model.detect(img)
-        
+
+        # Apply a harsh blur to the specified region
+        image_with_detections[self.debris_y_range[0]:self.debris_y_range[1], self.debris_x_range[0]:self.debris_x_range[1]] = cv2.GaussianBlur(image_with_detections[self.debris_y_range[0]:self.debris_y_range[1], self.debris_x_range[0]:self.debris_x_range[1]], (51, 51), 0)
+
         cv2.imshow("yolov7", image_with_detections)
         cv2.waitKey(1)
 
@@ -79,7 +84,7 @@ class detect(Node):
             xc = (self.coord[0]+self.coord[2])/2
             yc = (self.coord[1]+self.coord[3])/2
             #remove detections in debris range
-            if self.debris_exists and xc > self.debris_range[0] and xc < self.debris_range[1] and yc > self.debris_range[0] and yc < self.debris_range[1]:
+            if self.debris_exists and xc > self.debris_x_range[0] and xc < self.debris_x_range[1] and yc > self.debris_y_range[0] and yc < self.debris_y_range[1]:
                 self.coord =  [-1, -1, -1, -1]
         else:
             self.coord = [-1, -1, -1, -1]

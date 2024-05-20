@@ -8,7 +8,7 @@ img_size_ = 416
 diver_max_speed_ = 0.35
 
 #autopilot hyperparams
-publish_direct_command_ = False
+publish_direct_command_ = True
 pitch_limit_ = 0.075
 yaw_limit_ = 0.75
 max_speed_ = 1.0
@@ -16,7 +16,7 @@ min_speed_= 0.25
 pitch_gains_ = [0.05, 0.0, 0.1] #P,I,D
 yaw_gains_ = [0.25, 0.0, 0.5] #P,I,D
 thrust_gains_ = [500.0, 0.0, 0.0]
-initialize_debris_after_  = 50
+initialize_debris_after_  = 25
 
 #dqn hyperparams
 history_size_ = 20
@@ -28,8 +28,9 @@ frame_skip_ = 1
 #end of episode hyperparams
 empty_state_max_ = 20
 depth_range_ = [-6, -12]
-train_duration_ = 1000
-debris_range_ = [156,260]
+train_duration_ = 3000
+debris_x_range_ = [156,416]
+debris_y_range_ = [0,416]
 
 #reward hyperparams
 location_sigma_ = 0.5
@@ -51,14 +52,16 @@ adv_z_limit_ = 2.0
 #8 -> 2.0
 #13 -> best w/ linear velocity
 
+#16 -> debris in middle of camera exp
+ 
 #rarl hyperparams
 switch_every_ = 200
 switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 14
-train_for_ = 10
+experiment_number_ = 17
+train_for_ = 5
 
 #eval hyperparams
 values_to_test_ = [1750,1500,1250,1000,850]

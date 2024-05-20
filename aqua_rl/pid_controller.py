@@ -29,7 +29,7 @@ class pid_controller(Node):
         self.empty_state_max = hyperparams.empty_state_max_
         self.target_area = hyperparams.target_area_
         self.initialize_debris_after = hyperparams.initialize_debris_after_
-        self.experiment_name = 'debris'
+        self.experiment_name = 'halfdebris'
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Float32MultiArray, hyperparams.autopilot_command_, self.queue_size)
