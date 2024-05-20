@@ -206,7 +206,8 @@ def location_analysis(evaluation_directory, location_bins=50, area_bins=50):
     plt.yticks([-1, -0.5, 0, 0.5, 1])
     plt.xlabel('Normalized x coordinate')
     plt.ylabel('Normalized y coordinate')
-    plt.title('Diver Location Distribution')
+    plt.title('Diver Location')
+    plt.savefig('debris_location.png', dpi=600, bbox_inches='tight')
     plt.show()
 
     plt.hist(detected_locations[:,2], bins=area_bins, color='g', alpha=0.7)
@@ -287,20 +288,17 @@ def debris_analysis(dqn_directory, pid_directory, duration=False):
     if duration:
         plt.ylabel('Timesteps')
         plt.title('Tracking Duration')
-        plt.savefig('debris_duration.png', dpi=600)
+        plt.savefig('debris_duration.png', dpi=600, bbox_inches='tight')
     else:
         plt.title('Tracking Performance')
         plt.ylabel('Total Reward')
-        plt.savefig('debris_reward.png', dpi=600)
-
-
-
+        plt.savefig('debris_reward.png', dpi=600, bbox_inches='tight')
 
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/pitch_change', True)
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/yaw_change', False)
 
 # density_analysis([5,8], ['Baseline','RARL'])
 # episodic_returns([16])
-location_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/base_environment')
+#location_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/dqn_evaluations/halfdebris')
 #debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', True)
-debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', False)
+#debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', False)
