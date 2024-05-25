@@ -8,7 +8,7 @@ img_size_ = 416
 diver_max_speed_ = 0.35
 
 #autopilot hyperparams
-publish_direct_command_ = True
+publish_direct_command_ = False
 pitch_limit_ = 0.075
 yaw_limit_ = 0.75
 max_speed_ = 1.0
@@ -29,8 +29,8 @@ frame_skip_ = 1
 empty_state_max_ = 20
 depth_range_ = [-6, -12]
 train_duration_ = 3000
-debris_x_range_ = [156,416]
-debris_y_range_ = [0,416]
+debris_x_range_ = [0,1]
+debris_y_range_ = [0,1]
 
 #reward hyperparams
 location_sigma_ = 0.5
@@ -69,7 +69,7 @@ eval_prefix_ = 'bouyancy'
 eval_episode_ = 700
 eval_experiment_number_ = 8
 eval_for_ = 5
-eval_duration_ = 1000
+eval_duration_ = 3000
 command_topic_name_ = '/a13/command'
 imu_topic_name_ = '/aqua/pose'
 camera_topic_name_ = '/camera/left/image_raw/compressed'

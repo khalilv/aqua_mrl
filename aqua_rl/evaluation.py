@@ -31,8 +31,8 @@ class evaluation(Node):
         self.empty_state_max = hyperparams.empty_state_max_
         self.target_area = hyperparams.target_area_
         self.initialize_debris_after = hyperparams.initialize_debris_after_
-        self.experiment_name = 'halfdebris'
-        self.weight_path = '/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/2/weights/episode_00500.pt'
+        self.experiment_name = 'baseline'
+        self.weight_path = '/usr/local/data/kvirji/AQUA/aqua_rl/experiments/13/weights/episode_03300.pt'
 
         #subscribers and publishers
         self.command_publisher = self.create_publisher(Float32MultiArray, hyperparams.autopilot_command_, self.queue_size)

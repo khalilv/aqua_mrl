@@ -204,9 +204,9 @@ def location_analysis(evaluation_directory, location_bins=50, area_bins=50):
     plt.ylim(1, -1)
     plt.xticks([-1, -0.5, 0, 0.5, 1])
     plt.yticks([-1, -0.5, 0, 0.5, 1])
-    plt.xlabel('Normalized x coordinate')
-    plt.ylabel('Normalized y coordinate')
-    plt.title('Diver Location')
+    plt.xlabel('Normalized x-coordinate')
+    plt.ylabel('Normalized y-coordinate')
+    plt.title('Diver Location Heatmap')
     plt.savefig('debris_location.png', dpi=600, bbox_inches='tight')
     plt.show()
 
@@ -298,7 +298,6 @@ def debris_analysis(dqn_directory, pid_directory, duration=False):
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/yaw_change', False)
 
 # density_analysis([5,8], ['Baseline','RARL'])
-# episodic_returns([16])
 #location_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/dqn_evaluations/halfdebris')
-#debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', True)
+#debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/debris/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', True)
 #debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', False)
