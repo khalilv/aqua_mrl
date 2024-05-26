@@ -200,29 +200,31 @@ def location_analysis(evaluation_directory, location_bins=50, area_bins=50):
     heatmap, _, _ = np.histogram2d(detected_locations[:, 1], detected_locations[:, 0], bins=location_bins, range=[[-1,1],[-1,1]])
     extent = [-1, 1, -1, 1]
     plt.imshow(heatmap.T, extent=extent, origin='lower', interpolation='nearest', aspect='auto')
-    plt.colorbar()
+    c = plt.colorbar()
     plt.ylim(1, -1)
     plt.xticks([-1, -0.5, 0, 0.5, 1])
     plt.yticks([-1, -0.5, 0, 0.5, 1])
     plt.xlabel('Normalized x-coordinate')
     plt.ylabel('Normalized y-coordinate')
     plt.title('Diver Location Heatmap')
-    plt.savefig('debris_location.png', dpi=600, bbox_inches='tight')
+    c.set_label('Frames')
+    plt.savefig('dqn_debris_location.png', dpi=600, bbox_inches='tight')
     plt.show()
 
     plt.hist(detected_locations[:,2], bins=area_bins, color='g', alpha=0.7)
-    plt.title('Diver Size Distribution')
+    plt.title('Diver Size')
     plt.xlabel('Normalized bounding box area')
-    plt.axvline(x=0.02, color='k', linestyle='--', label='Target') 
+    plt.axvline(x=0.02, color='k', linestyle='--', label='Target area') 
     plt.legend()
-    plt.xlim(0, 0.05)
+    plt.xlim(0, 0.1)
+    plt.ylabel('Frames')
+    # plt.savefig('pid_baseline_area.png', dpi=600, bbox_inches='tight')
 
-    plt.ylabel('Count')
     plt.show()
 
 def debris_analysis(dqn_directory, pid_directory, duration=False):
     N = 50
-    x_max = 50000
+    x_max = 150000
 
     if duration:
         dqn_directory = os.path.join(dqn_directory, 'duration')
@@ -284,20 +286,50 @@ def debris_analysis(dqn_directory, pid_directory, duration=False):
     plt.fill_between(common_x_values, pid_mean - pid_std, pid_mean + pid_std, color='lightblue')
     
     plt.legend()
-    plt.xlabel('Interaction Steps')
+    plt.xlabel('Interaction steps')
     if duration:
-        plt.ylabel('Timesteps')
-        plt.title('Tracking Duration')
-        plt.savefig('debris_duration.png', dpi=600, bbox_inches='tight')
+        plt.ylabel('Duration (frames)')
+        plt.title('Duration')
+        plt.savefig('density_duration.png', dpi=600, bbox_inches='tight')
     else:
-        plt.title('Tracking Performance')
+        plt.title('Performance')
         plt.ylabel('Total Reward')
-        plt.savefig('debris_reward.png', dpi=600, bbox_inches='tight')
+        plt.savefig('density_reward.png', dpi=600, bbox_inches='tight')
+    plt.show()
+
+
+def evaluation_analysis(dir):
+    durations = []
+    rewards = []
+    detected_locations = []
+    missed_detections = []
+    for file in sorted(os.listdir(dir)):
+        if os.path.isfile(os.path.join(dir,file)):
+            with open(os.path.join(dir,file), 'rb') as f:
+                r = np.load(f)
+                locations = np.load(f)
+                durations.append(len(r))
+                rewards.append(np.sum(r))
+                dl = locations[locations[:, 3] == 1]
+                missed = len(locations[locations[:, 3] == 0])
+                detected_locations.append(dl)
+                missed_detections.append(missed)
+    detected_locations = np.vstack(detected_locations)
+    missed_detections = np.array(missed_detections)
+    rewards = np.array(rewards)
+    durations = np.array(durations)
+    print('Duration: {} +- {}'.format(np.mean(durations), np.std(durations)))
+    print('Reward: {} +- {}'.format(np.mean(rewards), np.std(rewards)))
+    # print('Missed detections: {} +- {}'.format(np.mean(missed_detections), np.std(missed_detections)))
+    print('Diver y-coordinates: {} +- {}'.format(np.mean(detected_locations[:, 0]), np.std(detected_locations[:,0])))
+    print('Diver x-coordinates: {} +- {}'.format(np.mean(detected_locations[:, 1]), np.std(detected_locations[:,1])))
 
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/pitch_change', True)
 # interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/yaw_change', False)
 
 # density_analysis([5,8], ['Baseline','RARL'])
 #location_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/dqn_evaluations/halfdebris')
-#debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/debris/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', True)
+#debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/density/results/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/density', False)
 #debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', False)
+evaluation_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/baseline')
+evaluation_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/dqn_evaluations/baseline')

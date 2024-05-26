@@ -66,23 +66,55 @@ def reward_calculation(yn, xn, a, detected, location_sigma, area_sigma, target_a
     else:
         reward = -1.0
     return reward
-# reward = []
+
+
+# reward_close = []
+# reward_far = []
+# reward_target = []
+
 # for y in np.linspace(-1,1,416):
-#     row = []
+#     row_close = []
+#     row_far = []
+#     row_target = []
 #     for x in np.linspace(-1,1,416):
-#         row.append(reward_calculation(y,x,1.0,0.5))
-#     reward.append(row)
+#         row_close.append(reward_calculation(y,x, 0.05, 1.0,0.5, 0.025, 0.02))
+#         row_far.append(reward_calculation(y,x, 0.001, 1.0,0.5, 0.025, 0.02))
+#         row_target.append(reward_calculation(y,x, 0.02, 1.0,0.5, 0.025, 0.02))
+#     reward_close.append(row_close)
+#     reward_far.append(row_far)
+#     reward_target.append(row_target)
+
 # from matplotlib import pyplot as plt
  
+# fig, axs = plt.subplots(1,3, figsize=(18, 5))
+# axs[0].imshow(reward_close, extent=[-1, 1, 1, -1], vmin=0, vmax = 1)
+# axs[1].imshow(reward_target, extent=[-1, 1, 1, -1], vmin=0, vmax=1)
+# last = axs[2].imshow(reward_far, extent=[-1, 1, 1, -1], vmin=0, vmax=1)
+# for i,a in enumerate([0.05,0.02,0.001]):
+#     axs[i].set_xlim(-1, 1)
+#     axs[i].set_ylim(1, -1)
+#     axs[i].set_xticks([-1.0, -0.5, 0.0, 0.5, 1.0])
+#     axs[i].set_yticks([-1.0, -0.5, 0.0, 0.5, 1.0])
+#     axs[i].set_xlabel('Normalized x-coordinate')
+#     axs[i].set_ylabel('Normalized y-coordinate')
+#     axs[i].set_title('Normalized bounding box area: {}'.format(a))
 
-# plt.imshow(reward, extent=[-1, 1, 1, -1])
+# # Add a single colorbar for all subplots
+# fig.colorbar(last, ax=axs, orientation='vertical', fraction=0.02, pad=0.04, label='Reward')
+
+# # Display the plot
+# plt.savefig('reward.png', dpi=600, bbox_inches='tight')
+
+# plt.show()
 # plt.colorbar()  # Add colorbar for reference
 
 # # Set x and y axis limits
 # plt.xlim(-1, 1)
 # plt.ylim(1, -1)
-# plt.xticks([-1, 0, 1])
-# plt.yticks([-1, 0, 1])
-# plt.xlabel('Normalized x coordinate')
-# plt.ylabel('Normalized y coordinate')
-# plt.savefig('reward.png', dpi=1200)
+# plt.xticks([-1.0, -0.5, 0.0, 0.5, 1.0])
+# plt.yticks([-1.0, -0.5, 0.0, 0.5, 1.0])
+# plt.clim(0,1)
+# plt.xlabel('Normalized x-coordinate')
+# plt.ylabel('Normalized y-coordinate')
+# plt.title('Normalized bounding box area: 0.05')
+# plt.savefig('reward_close.png', dpi=600, bbox_inches='tight')

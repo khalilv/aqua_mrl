@@ -18,3 +18,4 @@ experiments_td3/
 pid_evaluations/
 dqn_evaluations/
 rarl_evaluations/
+plots/
