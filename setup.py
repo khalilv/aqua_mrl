@@ -29,11 +29,7 @@ setup(
             'detect = aqua_rl.detect:main',
             'diver_controller = aqua_rl.diver_controller:main',
             'autopilot = aqua_rl.autopilot:main',
-            'current_controller = aqua_rl.current_controller:main',
-            'dqn_adversary = aqua_rl.dqn_adversary:main',
-            'interdependency = aqua_rl.interdependency:main',
             'evaluation = aqua_rl.evaluation:main',
-
         ],
     },
 )

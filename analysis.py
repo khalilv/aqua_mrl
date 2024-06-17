@@ -208,9 +208,8 @@ def location_analysis(evaluation_directory, location_bins=50, area_bins=50):
     plt.ylabel('Normalized y-coordinate')
     plt.title('Diver Location Heatmap')
     c.set_label('Frames')
-    plt.savefig('dqn_debris_location.png', dpi=600, bbox_inches='tight')
+    # plt.savefig('dqn_debris_location.png', dpi=600, bbox_inches='tight')
     plt.show()
-
     plt.hist(detected_locations[:,2], bins=area_bins, color='g', alpha=0.7)
     plt.title('Diver Size')
     plt.xlabel('Normalized bounding box area')
@@ -219,7 +218,6 @@ def location_analysis(evaluation_directory, location_bins=50, area_bins=50):
     plt.xlim(0, 0.1)
     plt.ylabel('Frames')
     # plt.savefig('pid_baseline_area.png', dpi=600, bbox_inches='tight')
-
     plt.show()
 
 def debris_analysis(dqn_directory, pid_directory, duration=False):
@@ -297,7 +295,6 @@ def debris_analysis(dqn_directory, pid_directory, duration=False):
         plt.savefig('density_reward.png', dpi=600, bbox_inches='tight')
     plt.show()
 
-
 def evaluation_analysis(dir):
     durations = []
     rewards = []
@@ -324,12 +321,33 @@ def evaluation_analysis(dir):
     print('Diver y-coordinates: {} +- {}'.format(np.mean(detected_locations[:, 0]), np.std(detected_locations[:,0])))
     print('Diver x-coordinates: {} +- {}'.format(np.mean(detected_locations[:, 1]), np.std(detected_locations[:,1])))
 
-# interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/pitch_change', True)
-# interdependency_study('/home/khalilv/Documents/aqua/aquasim_ws/interdependency/yaw_change', False)
+def moving_average(data, window_size):
+    return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
 
-# density_analysis([5,8], ['Baseline','RARL'])
-#location_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/dqn_evaluations/halfdebris')
-#debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/density/results/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/density', False)
-#debris_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/experiments/17/debris/', '/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/halfdebris', False)
-evaluation_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/pid_evaluations/baseline')
-evaluation_analysis('/usr/local/data/kvirji/AQUA/aqua_rl/dqn_evaluations/baseline')
+def baseline_analysis(dir, duration=False, window_size=5):
+    if duration:
+        filename = 'logs_duration.csv'
+    else:
+        filename = 'logs_reward.csv'
+
+    filepath = os.path.join(dir, filename)
+    data = pd.read_csv(filepath)
+    x = data.iloc[:, 1].values[:-15] 
+    y = data.iloc[:, 2].values[:-15] 
+
+    # Apply smoothing
+    y_smooth = moving_average(y, window_size)
+    x_smooth = x[:len(y_smooth)]  # Adjust x to match the length of the smoothed y
+
+    plt.plot(x_smooth, y_smooth, color='green')
+    plt.plot(x[:-4], y[:-4], alpha=0.3, color='lightgreen')  
+    plt.xlabel('Interaction steps')
+    if duration:
+            plt.ylabel('Duration (frames)')
+            plt.title('Duration')
+            plt.savefig('baseline_duration.png', dpi=600, bbox_inches='tight')
+    else:
+        plt.title('Performance')
+        plt.ylabel('Total Reward')
+        plt.savefig('baseline_reward.png', dpi=600, bbox_inches='tight')
+    plt.show()

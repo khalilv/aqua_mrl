@@ -60,7 +60,7 @@ switch_every_adv_ = 100
 
 #training hyperparams
 load_erm_ = True
-experiment_number_ = 17
+experiment_number_ = 0
 train_for_ = 5
 
 #eval hyperparams

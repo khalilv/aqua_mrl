@@ -41,6 +41,7 @@ class ThreeHeadDQNNetwork(nn.Module):
             nn.Linear(in_features= 512, out_features= 256),
             nn.ReLU(),  
             nn.Linear(in_features= 256, out_features= 128),
+            nn.ReLU()
 
         )
 
