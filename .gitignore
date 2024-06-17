@@ -11,4 +11,11 @@ evaluations/
 trajectories/
 experiments/
 pid_expert/
-
+diver_dataset/
+pipe_dataset/
+dqn_weights/
+experiments_td3/
+pid_evaluations/
+dqn_evaluations/
+rarl_evaluations/
+plots/
