@@ -5,7 +5,7 @@ segmentation_module/models/
 segmentation_module/pipeline_dataset/
 segmentation_module/rope_dataset/
 segmentation_module/rope_dataset_v2/
-aqua_rl/YOLOv7/weights/
+aqua_mrl/YOLOv7/weights/
 checkpoints/
 evaluations/
 trajectories/

@@ -89,7 +89,7 @@ def density_analysis(experiments, names):
         x = []
         values_to_test =  [3000.0,2500.0,2250.0,2000.0,1750.0,1500.0,1250.0,1000.0,850.0]
         for s in values_to_test:
-            directory = '/usr/local/data/kvirji/AQUA/aqua_rl/evaluations/{}/bouyancy_{}/'.format(str(exp), str(s))
+            directory = '/usr/local/data/kvirji/AQUA/aqua_mrl/evaluations/{}/bouyancy_{}/'.format(str(exp), str(s))
             if os.path.exists(directory):
                 results = []
                 for file in os.listdir(directory):
@@ -114,7 +114,7 @@ def speed_analysis(experiments):
         x = []
         values_to_test =  [0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 1.0, 1.1, 1.2, 1.3]
         for s in values_to_test:
-            directory = '/usr/local/data/kvirji/AQUA/aqua_rl/evaluations/{}/speed_{}/'.format(str(exp), str(s))
+            directory = '/usr/local/data/kvirji/AQUA/aqua_mrl/evaluations/{}/speed_{}/'.format(str(exp), str(s))
             if os.path.exists(directory):
                 results = []
                 for file in os.listdir(directory):
@@ -137,7 +137,7 @@ def pitch_analysis(experiments, names):
         x = []
         values_to_test =  [0.0025, 0.005, 0.0075, 0.0085, 0.015, 0.025, 0.065, 0.075, 0.085, 0.09, 0.1]
         for s in values_to_test:
-            directory = '/usr/local/data/kvirji/AQUA/aqua_rl/evaluations/{}/pitch_{}/'.format(str(exp), str(s))
+            directory = '/usr/local/data/kvirji/AQUA/aqua_mrl/evaluations/{}/pitch_{}/'.format(str(exp), str(s))
             if os.path.exists(directory):
                 results = []
                 for file in os.listdir(directory):
@@ -158,8 +158,8 @@ def pitch_analysis(experiments, names):
 
 def episodic_returns(experiments):
     for exp in experiments:
-        train_dir = '/usr/local/data/kvirji/AQUA/aqua_rl/experiments/{}/trajectories/'.format(str(exp))
-        eval_dir = '/usr/local/data/kvirji/AQUA/aqua_rl/experiments/{}/weights/'.format(str(exp))
+        train_dir = '/usr/local/data/kvirji/AQUA/aqua_mrl/experiments/{}/trajectories/'.format(str(exp))
+        eval_dir = '/usr/local/data/kvirji/AQUA/aqua_mrl/experiments/{}/weights/'.format(str(exp))
         train_returns = []
         eval_returns = []
         train_x = []

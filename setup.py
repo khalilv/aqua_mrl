@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 import os 
 from glob import glob
 
-package_name = 'aqua_rl'
+package_name = 'aqua_mrl'
 
 setup(
     name=package_name,
@@ -24,12 +24,12 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'pid_controller = aqua_rl.pid_controller:main',
-            'dqn_controller = aqua_rl.dqn_controller:main',
-            'detect = aqua_rl.detect:main',
-            'diver_controller = aqua_rl.diver_controller:main',
-            'autopilot = aqua_rl.autopilot:main',
-            'evaluation = aqua_rl.evaluation:main',
+            'pid_controller = aqua_mrl.pid_controller:main',
+            'dqn_controller = aqua_mrl.dqn_controller:main',
+            'detect = aqua_mrl.detect:main',
+            'diver_controller = aqua_mrl.diver_controller:main',
+            'autopilot = aqua_mrl.autopilot:main',
+            'evaluation = aqua_mrl.evaluation:main',
         ],
     },
 )

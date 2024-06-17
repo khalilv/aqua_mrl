@@ -10,8 +10,8 @@ from datasets import ExpertDataset
 from torch import nn, optim
 from ignite.metrics import Precision, Recall, Loss, Accuracy
 from tqdm import tqdm
-from aqua_rl.control.DQN import DQNNetwork
-from aqua_rl import hyperparams
+from aqua_mrl.control.DQN import DQNNetwork
+from aqua_mrl import hyperparams
 
 
 # function to reset all metrics

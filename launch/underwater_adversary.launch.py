@@ -5,10 +5,10 @@ from launch_ros.actions import Node
 def generate_launch_description():
     ld = LaunchDescription()
 
-    config = 'src/aqua_rl/config/params.yaml'
+    config = 'src/aqua_mrl/config/params.yaml'
 
     node=Node(
-        package = 'aqua_rl',
+        package = 'aqua_mrl',
         name = 'underwater_adversary_command_publisher',
         executable = 'underwater_adversary_command_publisher',
         parameters = [config], 

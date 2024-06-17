@@ -19,7 +19,7 @@ import subprocess
 while(1):
     returned_output = subprocess.run('pgrep ' + 'diver_controller', capture_output=True, shell=True)
     if returned_output.stdout.decode("utf-8")[:-1] =='':
-        subprocess.run('ros2 run aqua_rl diver_controller', shell=True)
+        subprocess.run('ros2 run aqua_mrl diver_controller', shell=True)
 
     time.sleep(1)
 ```
