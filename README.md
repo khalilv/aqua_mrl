@@ -1,6 +1,6 @@
-# Visual Servoing with an Autonomous Underwater Vehicle
+# Following scuba divers with an autonomous underwater vehicle 
 
-This ROS2 package contains all code used in my thesis on *Following Scuba Divers with an Autonomous Underwater Vehicle*. This code should be paired with the [Aquasim underwater robot simulator](https://www.independentrobotics.com/robot-simulator).
+This ROS2 package contains all code used in my thesis on *Following scuba divers with an autonomous underwater vehicle*. This code should be paired with the [Aquasim underwater robot simulator](https://www.independentrobotics.com/robot-simulator).
 
 There are several relevant nodes:
 
